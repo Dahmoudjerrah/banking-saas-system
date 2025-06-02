@@ -68,7 +68,7 @@ class RegistrationAcounteAgancyBisenessSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"type_account": "Seuls les comptes de type 'business' ou 'agency' sont autorisés."})
 
         return data
-
+    
     def create(self, validated_data):
         bank_db = self.context.get('bank_db')
 
@@ -81,7 +81,6 @@ class RegistrationAcounteAgancyBisenessSerializer(serializers.ModelSerializer):
                 date_of_birth=validated_data.get('date_of_birth', None),
             )
 
-            
             account_number = Account.generate_account_number()
             unique_code = Account.objects.generate_unique_code(bank_db)
             Account.objects.db_manager(bank_db).create(
@@ -204,8 +203,7 @@ class PasswordValidationSerializer(serializers.Serializer):
     def validate(self, attrs):
         password = attrs.get('password')
         user = self.context.get('user') 
-        #print(password) 
-
+        
         if not user:
             raise serializers.ValidationError("Utilisateur introuvable ou non authentifié.")
 
@@ -314,13 +312,12 @@ class TransactionSerializer(serializers.Serializer):
 class AllAccountsSerializer(serializers.Serializer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.bank_db = self.context.get('bank_db', 'default')
+        self.bank_db = self.context.get('bank_db')
         
-
     def to_representation(self, instance):
         accounts = Account.objects.using(self.bank_db).all()
         return {
-            'accounts': [
+            'accounts':[
                 {
                     'account_number':account.account_number,
                     'balance': str(account.balance),

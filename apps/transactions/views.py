@@ -8,7 +8,7 @@ from apps.users.models import User
 from decimal import Decimal
 from datetime import timedelta
 from django.utils import timezone
-from .serializer import TransferTransactionSerializer,RetraitMarchantSerializer,MerchantPaymentSerializer,DepositTransactionSerializer,PreTransactionRetrieveSerializer,RetraitTransactionSerializer,PreTransactionSerializer
+from .serializer import TransferTransactionSerializer,AllPreTransactionsSerializer,RetraitMarchantSerializer,MerchantPaymentSerializer,DepositTransactionSerializer,PreTransactionRetrieveSerializer,RetraitTransactionSerializer,PreTransactionSerializer
 #from rest_framework.permissions import IsAuthenticated
 #from apps.users.serializer import CustomJWTAuthentication
 
@@ -76,13 +76,17 @@ class MerchantPaymentView(APIView):
 
 class CreatePreTransactionView(APIView):
     def post(self, request):
-        purge_expired_pretransactions(request.source_bank_db)
+      #  purge_expired_pretransactions(request.source_bank_db)
         serializer = PreTransactionSerializer(data=request.data, context={'bank_db': request.source_bank_db})
         if serializer.is_valid():
             pre_transaction = serializer.save()  
+            created_at_formatted = pre_transaction.created_at.strftime('%Y-%m-%d %H:%M:%S')
             return Response({
                 "message": "Pré-transaction créée avec succès",
-                "code": pre_transaction.code
+                "Trs_ID": pre_transaction.id,
+                "code": pre_transaction.code,
+                "montent": pre_transaction.amount,
+                "Date_et_heure": created_at_formatted
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
@@ -105,11 +109,11 @@ class RetrievePreTransactionView(APIView):
                 )
                 created_at_formatted = pre_transaction.created_at.strftime('%Y-%m-%d %H:%M:%S')
                 response_data = {
-                    "Trs ID": pre_transaction.id,
+                    "Trs_ID": pre_transaction.id,
                     "code": pre_transaction.code,
                     "telephone": pre_transaction.client_phone,
                     "montent": pre_transaction.amount,
-                    "Date et heure": created_at_formatted
+                    "Date_et_heure": created_at_formatted
                 }
                 return Response(response_data, status=status.HTTP_200_OK)
             except PreTransaction.DoesNotExist:
@@ -128,13 +132,13 @@ class CancelPreTransactionView(APIView):
         except PreTransaction.DoesNotExist:
             return Response({"error": "Pré-transaction introuvable."}, status=status.HTTP_404_NOT_FOUND) 
         
-def purge_expired_pretransactions(bank_db):
-    expiry_time = timezone.now() - timedelta(minutes=1)
+# def purge_expired_pretransactions(bank_db):
+#     expiry_time = timezone.now() - timedelta(minutes=1)
     
-    expired_items = PreTransaction.objects.using(bank_db).filter(created_at__lt=expiry_time)
+#     expired_items = PreTransaction.objects.using(bank_db).filter(created_at__lt=expiry_time)
     
-    for item in expired_items:
-        item.delete(using=bank_db)
+#     for item in expired_items:
+#         item.delete(using=bank_db)
               
 
 class CreatePaymentRequestView(APIView):
@@ -160,7 +164,7 @@ class CreatePaymentRequestView(APIView):
             except:
                 return Response({"error": "Montant invalide."}, status=400)
 
-            # Vérifier que l'utilisateur est commerçant
+            
             merchant_account = Account.objects.using(bank_db).filter(user=user, type_account="business").first()
             if not merchant_account:
                 return Response({"error": "Compte commerçant introuvable."}, status=400)
@@ -202,3 +206,39 @@ class RetrievePaymentRequestView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)        
+
+
+class RetrieveAllPreTransactionsView(APIView):
+    def post(self, request):
+      
+        bank_db = request.source_bank_db
+        serializer = AllPreTransactionsSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            try:
+              
+                pre_transactions = PreTransaction.objects.using(bank_db).all()
+                if not pre_transactions.exists():
+                    return Response({"message": "Aucune pré-transaction trouvée dans la base de données."},
+                                  status=status.HTTP_404_NOT_FOUND)
+                
+              
+                response_data = []
+                for transaction in pre_transactions:
+                    created_at_formatted = transaction.created_at.strftime('%Y-%m-%d %H:%M:%S')
+                    transaction_data = {
+                        "Trs_ID": transaction.id,
+                        "code": transaction.code,
+                        "telephone": transaction.client_phone,
+                        "montant": transaction.amount,
+                        "Date_et_heure": created_at_formatted
+                    }
+                    response_data.append(transaction_data)
+                
+                return Response(response_data, status=status.HTTP_200_OK)
+                
+            except Exception as e:
+                return Response({"error": f"Une erreur s'est produite: {str(e)}"},
+                              status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

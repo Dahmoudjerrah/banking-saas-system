@@ -1,8 +1,11 @@
+
+
 class TenantRouter:
   
     class DatabaseNotFoundError(Exception):
      pass
 
+    
 
     def db_for_write(self, model, **hints):
         if 'bank_db' in hints:

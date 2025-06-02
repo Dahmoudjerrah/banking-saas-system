@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'apps.banks',
     'apps.transactions',
     'apps.accounts',
+    'apps.adminselect', 
 ]
 
 MIDDLEWARE = [
@@ -159,6 +160,15 @@ DATABASES = {
         'HOST': 'localhost',
         'PORT': '5432',
     }
+    ,
+    'sedad': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'sedad_db',
+        'USER': 'postgres',
+        'PASSWORD': '123456',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
 }
 
 
@@ -201,7 +211,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://192.168.1.134:8080",  # Adresse de votre serveur React
     #"http://192.168.100.135"
     "http://192.168.100.16:8080",
-     "http://localhost:8280",
+    "http://localhost:8280",
     "http://127.0.0.1:8280"
 ]
 

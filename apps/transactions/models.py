@@ -64,6 +64,7 @@ class PreTransaction(models.Model):
     client_phone = models.CharField(max_length=15)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
+    is_used = models.BooleanField(default=False)
 
     def generate_unique_code(self, db_to_use=None):
       
@@ -87,6 +88,13 @@ class PreTransaction(models.Model):
     
     def __str__(self):
         return f"{self.id} - Code: {self.code} - {self.client_phone} - {self.amount}"
+    
+    def is_active(self):
+        
+        if self.is_used:
+            return False
+        expiration_time = self.created_at + timezone.timedelta(minutes=5)
+        return timezone.now() <= expiration_time
     
 class FeeRule(models.Model):
     transaction_type = models.CharField(

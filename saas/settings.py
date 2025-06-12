@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -25,7 +26,7 @@ SECRET_KEY = 'django-insecure-r9v(jue-u*uz(y3^qp0kcs037&k4i)-n%-q3sgxk_#&ue!ju*9
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1','127.0.0.1:8085','localhost','192.168.1.134']
+ALLOWED_HOSTS = ['127.0.0.1','127.0.0.1:8085','localhost','192.168.74.184','192.168.1.134','192.168.100.72']
 
 #ALLOWED_HOSTS = ['localhost','192.168.100.16']
 #ALLOWED_HOSTS = ['localhost', '192.168.100.135']
@@ -56,10 +57,11 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+   'corsheaders.middleware.CorsMiddleware',
     'core.middleware.BankMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
+    
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -72,6 +74,9 @@ AUTHENTICATION_BACKENDS = [
     'apps.users.authentication.BankSpecificAuthenticationBackend',
     'django.contrib.auth.backends.ModelBackend',  # Keep the default backend as a fallback
 ]
+
+CHINGUISOFT_VALIDATION_KEY = 'bOD4fydSCjVCfH8d'
+CHINGUISOFT_VALIDATION_TOKEN = '7139PpwryaEXTVPcSi3T3kqsHVX3B0VC'
 
 
 ROOT_URLCONF = 'saas.urls'
@@ -204,15 +209,16 @@ USE_I18N = True
 USE_TZ = True
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000", 
+    "http://localhost:3001", 
     "http://localhost:52767",
     "http://localhost:8080",
     "http://127.0.0.1:8080",
-    "http://192.168.1.134:8080",  # Adresse de votre serveur React
+    "http://192.168.74.184:8080",  # Adresse de votre serveur React
     #"http://192.168.100.135"
     "http://192.168.100.16:8080",
     "http://localhost:8280",
-    "http://127.0.0.1:8280"
+    "http://127.0.0.1:8280",
+    #"http://localhost:57751"
 ]
 
 CORS_ALLOW_METHODS = [
@@ -266,3 +272,17 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.User'
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS.append("http://localhost:8280")
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+}

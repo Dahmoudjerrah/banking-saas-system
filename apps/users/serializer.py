@@ -326,4 +326,200 @@ class AllAccountsSerializer(serializers.Serializer):
                 }
                 for account in accounts
             ]
-        }        
+        } 
+
+class TransactionAgance(serializers.Serializer):
+    phone_number = serializers.CharField()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.bank_db = self.context.get('bank_db')
+
+    def validate(self, attrs):
+        phone_number = attrs.get('phone_number')
+
+        try:
+            user = User.objects.using(self.bank_db).get(phone_number=phone_number)
+            attrs['user'] = user
+        except User.DoesNotExist:
+            raise serializers.ValidationError(
+                f"Aucun utilisateur trouvé avec le numéro de téléphone {phone_number} dans la base de données {self.bank_db}."
+            )
+
+        try:
+            account = Account.objects.using(self.bank_db).get(user=user,type_account='agency')
+            attrs['account'] = account
+        except Account.DoesNotExist:
+            raise serializers.ValidationError(
+                f"Aucun compte trouvé pour l'utilisateur {user.phone_number}."
+            )
+
+        return attrs
+
+    def to_representation(self, instance):
+        account = self.validated_data['account']
+
+        account_transactions = Transaction.objects.using(self.bank_db).filter(
+            Q(source_account=account) | Q(destination_account=account)
+        ).exclude(destination_account__type_account="commission").order_by('-date')
+
+        return {
+            'transactions': [
+                {
+                    'type': transaction.type,
+                    'date': transaction.date,
+                    'amount': str(transaction.amount),
+                    'source': self.determine_source(transaction, account),
+                }
+                for transaction in account_transactions
+            ]
+        }
+
+    def determine_source(self, transaction, account):
+        if transaction.source_account == account:
+            return 'sent'
+        elif transaction.destination_account == account:
+            return 'received'
+        else:
+            return 'unknown'
+
+class TransactionBusseness(serializers.Serializer):
+    phone_number = serializers.CharField()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.bank_db = self.context.get('bank_db')
+
+    def validate(self, attrs):
+        phone_number = attrs.get('phone_number')
+
+        try:
+            user = User.objects.using(self.bank_db).get(phone_number=phone_number)
+            attrs['user'] = user
+        except User.DoesNotExist:
+            raise serializers.ValidationError(
+                f"Aucun utilisateur trouvé avec le numéro de téléphone {phone_number} dans la base de données {self.bank_db}."
+            )
+
+        try:
+            account = Account.objects.using(self.bank_db).get(user=user,type_account='business')
+            attrs['account'] = account
+        except Account.DoesNotExist:
+            raise serializers.ValidationError(
+                f"Aucun compte trouvé pour l'utilisateur {user.phone_number}."
+            )
+
+        return attrs
+
+    def to_representation(self, instance):
+        account = self.validated_data['account']
+
+        account_transactions = Transaction.objects.using(self.bank_db).filter(
+            Q(source_account=account) | Q(destination_account=account)
+        ).exclude(destination_account__type_account="commission").order_by('-date')
+
+        return {
+            'transactions': [
+                {
+                    'type': transaction.type,
+                    'date': transaction.date,
+                    'amount': str(transaction.amount),
+                    'source': self.determine_source(transaction, account),
+                }
+                for transaction in account_transactions
+            ]
+        }
+
+    def determine_source(self, transaction, account):
+        if transaction.source_account == account:
+            return 'sent'
+        elif transaction.destination_account == account:
+            return 'received'
+        else:
+            return 'unknown'
+
+class ComercantAccountSerializer(serializers.Serializer):
+    phone_number = serializers.CharField()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.bank_db = self.context.get('bank_db')
+
+    def validate(self, attrs):
+        phone_number = attrs.get('phone_number')
+
+        try:
+            user = User.objects.using(self.bank_db).get(phone_number=phone_number)
+            attrs['user'] = user
+        except User.DoesNotExist:
+            raise serializers.ValidationError(
+                f"Aucun utilisateur trouvé avec le numéro de téléphone {phone_number} dans la base de données {self.bank_db}."
+            )
+        try:
+            account = Account.objects.using(self.bank_db).get(user=user,type_account='business')
+            attrs['account'] = account
+        except Account.DoesNotExist:
+            raise serializers.ValidationError(
+                f"Aucun compte trouvé pour l'utilisateur {user.username}."
+            )
+
+        return attrs
+
+    def to_representation(self, instance):
+        user = self.validated_data['user']
+        account = self.validated_data['account']
+
+        return {
+            'username': user.username,
+            'phone_number': user.phone_number,
+            'email': user.email,
+            'status': account.status,
+            'solde': account.balance,
+            'code':account.code,
+            'registration':account.registration_number,
+            'tax':account.tax_id
+            
+        }  
+
+class AganceAccountSerializer(serializers.Serializer):
+    phone_number = serializers.CharField()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.bank_db = self.context.get('bank_db')
+
+    def validate(self, attrs):
+        phone_number = attrs.get('phone_number')
+
+        try:
+            user = User.objects.using(self.bank_db).get(phone_number=phone_number)
+            attrs['user'] = user
+        except User.DoesNotExist:
+            raise serializers.ValidationError(
+                f"Aucun utilisateur trouvé avec le numéro de téléphone {phone_number} dans la base de données {self.bank_db}."
+            )
+        try:
+            account = Account.objects.using(self.bank_db).get(user=user,type_account='agency')
+            attrs['account'] = account
+        except Account.DoesNotExist:
+            raise serializers.ValidationError(
+                f"Aucun compte trouvé pour l'utilisateur {user.username}."
+            )
+
+        return attrs
+
+    def to_representation(self, instance):
+        user = self.validated_data['user']
+        account = self.validated_data['account']
+
+        return {
+            'username': user.username,
+            'phone_number': user.phone_number,
+            'email': user.email,
+            'status': account.status,
+            'solde': account.balance,
+            'code':account.code,
+            'registration':account.registration_number,
+            'tax':account.tax_id
+            
+        }      

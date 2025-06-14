@@ -1,6 +1,62 @@
 version: "3.9"
 
 services:
+ 
+  db_saas:
+    image: postgres:16
+    container_name: db-saas
+    environment:
+      POSTGRES_DB: saas_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+    volumes:
+      - db_saas_data:/var/lib/postgresql/data/
+    ports:
+      - "5433:5432"
+    networks:
+      - saas-network
+
+  db_rasidi:
+    image: postgres:16
+    container_name: db-rasidi
+    environment:
+      POSTGRES_DB: rasidi
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+    volumes:
+      - db_rasidi_data:/var/lib/postgresql/data/
+    ports:
+      - "5434:5432"
+    networks:
+      - saas-network
+
+  db_gaza:
+    image: postgres:16
+    container_name: gaza_db
+    environment:
+      POSTGRES_DB: gaza
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+    volumes:
+      - db_gaza_data:/var/lib/postgresql/data/
+    ports:
+      - "5435:5432"
+    networks:
+      - saas-network
+
+  db_sedad:
+    image: postgres:16
+    container_name: db-sedad
+    environment:
+      POSTGRES_DB: sedad
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+    volumes:
+      - db_sedad_data:/var/lib/postgresql/data/
+    ports:
+      - "5436:5432"
+    networks:
+      - saas-network
   web:
     env_file:
       - .env.dev
@@ -27,62 +83,6 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=123456
       - DB_HOST=db_saas
-    networks:
-      - saas-network
-
-  db_saas:
-    image: postgres:16
-    container_name: db-saas
-    environment:
-      POSTGRES_DB: saas_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456
-    volumes:
-      - db_saas_data:/var/lib/postgresql/data/
-    ports:
-      - "5433:5432"
-    networks:
-      - saas-network
-
-  db_rasidi:
-    image: postgres:16
-    container_name: db-rasidi
-    environment:
-      POSTGRES_DB: rasidi_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456
-    volumes:
-      - db_rasidi_data:/var/lib/postgresql/data/
-    ports:
-      - "5434:5432"
-    networks:
-      - saas-network
-
-  db_gaza:
-    image: postgres:16
-    container_name: db-gaza
-    environment:
-      POSTGRES_DB: gaza_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456
-    volumes:
-      - db_gaza_data:/var/lib/postgresql/data/
-    ports:
-      - "5435:5432"
-    networks:
-      - saas-network
-
-  db_sedad:
-    image: postgres:16
-    container_name: db-sedad
-    environment:
-      POSTGRES_DB: sedad_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456
-    volumes:
-      - db_sedad_data:/var/lib/postgresql/data/
-    ports:
-      - "5436:5432"
     networks:
       - saas-network
 

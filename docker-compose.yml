@@ -1,0 +1,91 @@
+version: "3.9"
+
+services:
+  web:
+    build: .
+    container_name: saas-web
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db_saas
+      - db_rasidi
+      - db_gaza
+      - db_sedad
+    environment:
+      - DEBUG=1
+      - DJANGO_ALLOWED_HOSTS=localhost 127.0.0.1 [::1]
+      - DB_USER=postgres
+      - DB_PASSWORD=123456
+      - DB_HOST=db_saas
+    networks:
+      - saas-network
+
+  db_saas:
+    image: postgres:16
+    container_name: db-saas
+    environment:
+      POSTGRES_DB: saas_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+    volumes:
+      - db_saas_data:/var/lib/postgresql/data/
+    ports:
+      - "5433:5432"
+    networks:
+      - saas-network
+
+  db_rasidi:
+    image: postgres:16
+    container_name: db-rasidi
+    environment:
+      POSTGRES_DB: rasidi_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+    volumes:
+      - db_rasidi_data:/var/lib/postgresql/data/
+    ports:
+      - "5434:5432"
+    networks:
+      - saas-network
+
+  db_gaza:
+    image: postgres:16
+    container_name: db-gaza
+    environment:
+      POSTGRES_DB: gaza_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+    volumes:
+      - db_gaza_data:/var/lib/postgresql/data/
+    ports:
+      - "5435:5432"
+    networks:
+      - saas-network
+
+  db_sedad:
+    image: postgres:16
+    container_name: db-sedad
+    environment:
+      POSTGRES_DB: sedad_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+    volumes:
+      - db_sedad_data:/var/lib/postgresql/data/
+    ports:
+      - "5436:5432"
+    networks:
+      - saas-network
+
+volumes:
+  db_saas_data:
+  db_rasidi_data:
+  db_gaza_data:
+  db_sedad_data:
+
+networks:
+  saas-network:

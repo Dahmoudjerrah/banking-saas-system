@@ -9,9 +9,9 @@ services:
     command: >
       sh -c "python manage.py collectstatic --noinput &&
              python manage.py migrate &&
-             python manage.py migrate --database=db_rasidi &&
-             python manage.py migrate --database=db_gaza &&
-             python manage.py migrate --database=db_sedad &&
+             python manage.py migrate --database=rasidi &&
+             python manage.py migrate --database=gaza &&
+             python manage.py migrate --database=sedad &&
              python manage.py runserver 0.0.0.0:8000"
     ports:
       - "8000:8000"

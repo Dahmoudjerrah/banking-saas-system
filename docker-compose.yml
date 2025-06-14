@@ -24,7 +24,7 @@ services:
     image: postgres:16
     container_name: db_rasidi
     environment:
-      POSTGRES_DB: db_rasidi
+      POSTGRES_DB: rasidi
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 123456
     volumes:
@@ -43,7 +43,7 @@ services:
     image: postgres:16
     container_name: db_gaza
     environment:
-      POSTGRES_DB: db_gaza
+      POSTGRES_DB: gaza
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 123456
     volumes:
@@ -62,7 +62,7 @@ services:
     image: postgres:16
     container_name: db_sedad
     environment:
-      POSTGRES_DB: db_sedad
+      POSTGRES_DB: sedad
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 123456
     volumes:

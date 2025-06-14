@@ -32,7 +32,7 @@ class TenantRouter:
      if app_label in ['transactions', 'accounts']:
         return db != 'default'
     # Permet les migrations sur les autres bases de données configurées
-     return db in ['default', 'rasidi', 'gaza']
+     return db in ['default', 'rasidi', 'gaza','sedad']
 
 
     

@@ -154,7 +154,7 @@ DATABASES = {
         'NAME': config('DB_NAME_RASIDI'),
         'USER': config('DB_USER'),
         'PASSWORD': config('DB_PASSWORD'),
-        'HOST': config('DB_HOST'),
+        'HOST': config('DB_HOST_RASIDI', default='localhost'),
         'PORT': config('DB_PORT_RASIDI', default='5432'),
     },
     'gaza': {
@@ -162,7 +162,7 @@ DATABASES = {
         'NAME': config('DB_NAME_GAZA'),
         'USER': config('DB_USER'),
         'PASSWORD': config('DB_PASSWORD'),
-        'HOST': config('DB_HOST'),
+        'HOST': config('DB_HOST_GAZA', default='localhost'),
         'PORT': config('DB_PORT_GAZA', default='5432'),
     },
     'sedad': {
@@ -170,12 +170,10 @@ DATABASES = {
         'NAME': config('DB_NAME_SEDAD'),
         'USER': config('DB_USER'),
         'PASSWORD': config('DB_PASSWORD'),
-        'HOST': config('DB_HOST'),
+        'HOST': config('DB_HOST_SEDAD', default='localhost'),
         'PORT': config('DB_PORT_SEDAD', default='5432'),
     }
 }
-
-
 
 DATABASE_ROUTERS = ['core.routers.TenantRouter']
 # Password validation

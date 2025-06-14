@@ -1,10 +1,9 @@
 version: "3.9"
 
 services:
- 
   db_saas:
     image: postgres:16
-    container_name: db-saas
+    container_name: db_saas
     environment:
       POSTGRES_DB: saas_db
       POSTGRES_USER: postgres
@@ -15,10 +14,15 @@ services:
       - "5433:5432"
     networks:
       - saas-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d saas_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   db_rasidi:
     image: postgres:16
-    container_name: db-rasidi
+    container_name: db_rasidi
     environment:
       POSTGRES_DB: rasidi
       POSTGRES_USER: postgres
@@ -29,10 +33,15 @@ services:
       - "5434:5432"
     networks:
       - saas-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d rasidi"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   db_gaza:
     image: postgres:16
-    container_name: gaza_db
+    container_name: db_gaza
     environment:
       POSTGRES_DB: gaza
       POSTGRES_USER: postgres
@@ -43,10 +52,15 @@ services:
       - "5435:5432"
     networks:
       - saas-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d gaza"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   db_sedad:
     image: postgres:16
-    container_name: db-sedad
+    container_name: db_sedad
     environment:
       POSTGRES_DB: sedad
       POSTGRES_USER: postgres
@@ -57,34 +71,43 @@ services:
       - "5436:5432"
     networks:
       - saas-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sedad"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   web:
     env_file:
       - .env.dev
     build: .
     container_name: saas-web
     command: >
-      sh -c "python manage.py collectstatic --noinput &&
-             python manage.py migrate &&
-             python manage.py migrate --database=rasidi &&
-             python manage.py migrate --database=gaza &&
-             python manage.py migrate --database=sedad &&
-             python manage.py runserver 0.0.0.0:8000"
+      sh -c "
+        echo 'Waiting for databases to be ready...' &&
+        sleep 10 &&
+        python manage.py collectstatic --noinput &&
+        python manage.py migrate &&
+        python manage.py migrate --database=rasidi &&
+        python manage.py migrate --database=gaza &&
+        python manage.py migrate --database=sedad &&
+        echo 'Starting Django development server...' &&
+        python manage.py runserver 0.0.0.0:8000
+      "
     ports:
       - "8000:8000"
     depends_on:
-      - db_saas
-      - db_rasidi
-      - db_gaza
-      - db_sedad
-      - pgadmin
-    environment:
-      - DEBUG=1
-      - DJANGO_ALLOWED_HOSTS=localhost 127.0.0.1 [::1]
-      - DB_USER=postgres
-      - DB_PASSWORD=123456
-      - DB_HOST=db_saas
+      db_saas:
+        condition: service_healthy
+      db_rasidi:
+        condition: service_healthy
+      db_gaza:
+        condition: service_healthy
+      db_sedad:
+        condition: service_healthy
     networks:
       - saas-network
+    restart: unless-stopped
 
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -92,6 +115,7 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
       PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
       - "8081:80"
     volumes:
@@ -103,6 +127,7 @@ services:
       - db_rasidi
       - db_gaza
       - db_sedad
+    restart: unless-stopped
 
 volumes:
   db_saas_data:
@@ -113,3 +138,4 @@ volumes:
 
 networks:
   saas-network:
+    driver: bridge

@@ -62,7 +62,7 @@ class PasswordResetOTP(models.Model):
         CORRECTION: Accepter le paramètre using pour multi-DB
         """
         self.is_used = True
-        self.save(using=using)  # ✅ Passer le paramètre using
+        self.save(using=using)  
 
     def __str__(self):
         return f"Password Reset OTP for {self.phone_number} - {'Verified' if self.is_verified else 'Pending'}"
@@ -103,7 +103,7 @@ class OTPVerification(models.Model):
         cls.objects.using(db_alias).filter(created_at__lt=expiry_time).delete()
     
     def save(self, *args, **kwargs):
-        # Nettoyer les anciens OTP avant de sauvegarder
+        
         if not self.pk:
             db_alias = kwargs.get('using', 'default')
             self.__class__.cleanup_expired(db_alias)

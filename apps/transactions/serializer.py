@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from rest_framework import serializers
 from apps.accounts.models import Account,DemandeChequiers
 from .models import Transaction,Fee,PreTransaction
@@ -964,3 +964,131 @@ def calculate_available_balance(bank_db, client_phone, account_balance, fee_calc
     available_balance = account_balance - reserved_amount
     
     return available_balance, reserved_amount
+
+
+class RechargeAgencySerializer(serializers.ModelSerializer):
+    phone_number = serializers.CharField(max_length=20)
+    
+    class Meta:
+        model = Transaction
+        fields = ['amount', 'phone_number']
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.bank_db = self.context.get('bank_db')
+        if not self.bank_db:
+            raise serializers.ValidationError("Base de données non spécifiée dans le contexte.")
+    
+    def validate_phone_number(self, value):
+      
+        if not value:
+            raise serializers.ValidationError("Le numéro de téléphone est requis.")
+        
+        cleaned_phone = ''.join(filter(str.isdigit, value))
+        
+        if len(cleaned_phone) < 8:
+            raise serializers.ValidationError("Numéro de téléphone invalide.")
+        
+        return value.strip()
+    
+    def validate_amount(self, value):
+        
+        try:
+            amount = Decimal(str(value))
+            if amount <= 0:
+                raise serializers.ValidationError("Le montant doit être supérieur à zéro.")
+          
+            return amount
+        except (TypeError, ValueError, InvalidOperation):
+            raise serializers.ValidationError("Format de montant invalide. Doit être un nombre décimal valide.")
+    
+    def validate(self, attrs):
+      
+        phone_number = attrs.get('phone_number')
+        amount = attrs.get('amount')
+        
+        try:
+            
+            try:
+                user = User.objects.using(self.bank_db).get(phone_number=phone_number)
+            except User.DoesNotExist:
+                raise serializers.ValidationError(
+                    f"Aucun utilisateur trouvé avec le numéro {phone_number} dans la base de données {self.bank_db}."
+                )
+            
+            
+            try:
+                agency_account = Account.objects.using(self.bank_db).get(
+                    user=user, 
+                    type_account='agency'
+                )
+            except Account.DoesNotExist:
+                raise serializers.ValidationError(
+                    f"L'utilisateur {phone_number} n'a pas de compte d'agence dans la base de données {self.bank_db}."
+                )
+            
+            
+          
+            if agency_account.status != 'ACTIVE':
+                raise serializers.ValidationError(
+                    f"Le compte d'agence de l'utilisateur {phone_number} n'est pas actif. Statut actuel: {agency_account.status}"
+                )
+            
+            
+          
+            attrs['user'] = user
+            attrs['agency_account'] = agency_account
+            
+            return attrs
+            
+        except Exception as e:
+            if isinstance(e, serializers.ValidationError):
+                raise e
+            else:
+                raise serializers.ValidationError(f"Erreur lors de la validation : {str(e)}")
+    
+    def create(self, validated_data):
+        
+        user = validated_data['user']
+        agency_account = validated_data['agency_account']
+        amount = validated_data['amount']
+        phone_number = validated_data['phone_number']
+        
+        recharge_transaction = None
+        
+        try:
+            with transaction.atomic(using=self.bank_db):
+                
+                recharge_transaction = Transaction.objects.using(self.bank_db).create(
+                    type='deposit',
+                    amount=amount,
+                    source_account=None,  
+                    destination_account=agency_account,
+                    status='pending',
+                    
+                )
+                
+              
+                agency_account.balance += amount
+                agency_account.save(using=self.bank_db)
+                
+                
+                recharge_transaction.status = 'success'
+                recharge_transaction.save(using=self.bank_db)
+                
+                
+                
+                return recharge_transaction
+                
+        except Exception as e:
+            
+            if recharge_transaction:
+                try:
+                    recharge_transaction.status = 'failure'
+                    recharge_transaction.save(using=self.bank_db)
+                except Exception:
+                    pass  
+            
+            error_message = f"Échec de la recharge d'agence pour {phone_number}: {str(e)}"
+            print(f"ERREUR: {error_message}")
+            raise serializers.ValidationError(error_message)

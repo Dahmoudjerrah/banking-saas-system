@@ -8,7 +8,7 @@ from apps.users.models import User
 from decimal import Decimal
 from datetime import timedelta
 from django.utils import timezone
-from .serializer import TransferTransactionSerializer,AllPreTransactionsSerializer,RetraitMarchantSerializer,MerchantPaymentSerializer,DepositTransactionSerializer,PreTransactionRetrieveSerializer,RetraitTransactionSerializer,PreTransactionSerializer
+from .serializer import TransferTransactionSerializer,RechargeAgencySerializer,AllPreTransactionsSerializer,RetraitMarchantSerializer,MerchantPaymentSerializer,DepositTransactionSerializer,PreTransactionRetrieveSerializer,RetraitTransactionSerializer,PreTransactionSerializer
 #from rest_framework.permissions import IsAuthenticated
 #from apps.users.serializer import CustomJWTAuthentication
 
@@ -242,3 +242,11 @@ class RetrieveAllPreTransactionsView(APIView):
                               status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+class RechargeAgancyView(APIView):
+      def post(self, request, *args, **kwargs):
+        serializer = RechargeAgencySerializer(data=request.data, context={'bank_db': request.source_bank_db})
+        if serializer.is_valid():
+            transaction = serializer.save()
+            return Response({"message": "recharge succes"}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)    

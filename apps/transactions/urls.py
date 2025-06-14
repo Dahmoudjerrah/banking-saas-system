@@ -1,7 +1,8 @@
 from django.urls import path
 
-from .views import TransferTransactionView,RetrieveAllPreTransactionsView,RetraiMarchantView,RetrievePaymentRequestView,CreatePaymentRequestView,MerchantPaymentView,CancelPreTransactionView,DepositTransactionView,RetraiTransactionView,CreatePreTransactionView,RetrievePreTransactionView
+from .views import TransferTransactionView,RechargeAgancyView,RetrieveAllPreTransactionsView,RetraiMarchantView,RetrievePaymentRequestView,CreatePaymentRequestView,MerchantPaymentView,CancelPreTransactionView,DepositTransactionView,RetraiTransactionView,CreatePreTransactionView,RetrievePreTransactionView
 urlpatterns = [
+    path('transactions/rechargeagancy/', RechargeAgancyView.as_view(), name='transaction-recharge'),
     path('transactions/depose/', DepositTransactionView.as_view(), name='transaction-create'),
     path('transactions/retrai/', RetraiTransactionView.as_view(), name='transaction-retrai'),
     path('transactions/retrai/marchant', RetraiMarchantView.as_view(), name='retrai-marchant'),

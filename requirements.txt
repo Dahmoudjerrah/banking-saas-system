@@ -17,3 +17,4 @@ psycopg[binary]
 requests
 reportlab
 django-filter
+python-decouple

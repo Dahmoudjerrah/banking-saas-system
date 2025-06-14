@@ -2,10 +2,13 @@ version: "3.9"
 
 services:
   web:
+    env_file:
+      - .env.dev
     build: .
     container_name: saas-web
     command: >
-      sh -c "python manage.py migrate &&
+      sh -c "python manage.py collectstatic --noinput &&
+             python manage.py migrate &&
              python manage.py runserver 0.0.0.0:8000"
     volumes:
       - .:/app
@@ -16,6 +19,7 @@ services:
       - db_rasidi
       - db_gaza
       - db_sedad
+      - pgadmin
     environment:
       - DEBUG=1
       - DJANGO_ALLOWED_HOSTS=localhost 127.0.0.1 [::1]
@@ -81,11 +85,30 @@ services:
     networks:
       - saas-network
 
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8081:80" 
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - saas-network
+    depends_on:
+      - db_saas
+      - db_rasidi
+      - db_gaza
+      - db_sedad
+
 volumes:
   db_saas_data:
   db_rasidi_data:
   db_gaza_data:
   db_sedad_data:
+  pgadmin_data:
 
 networks:
   saas-network:

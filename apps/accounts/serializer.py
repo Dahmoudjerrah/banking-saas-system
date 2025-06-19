@@ -1,12 +1,12 @@
 from rest_framework import serializers, status
 
 from django.db import IntegrityError
-from .models import Account
+from .models import InternAccount
 
 
 class InternalAccountSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Account
+        model = InternAccount
         fields = ['account_number', 'balance', 'status', 'purpose']
         read_only_fields = ['account_number', 'status']
 
@@ -14,15 +14,20 @@ class InternalAccountSerializer(serializers.ModelSerializer):
         bank_db = self.context.get('bank_db')
         purpose = validated_data.get('purpose')
 
-        if purpose not in dict(Account.PURPOSE_CHOICES):
-            raise serializers.ValidationError({"purpose": "Type de finalité invalide pour un compte interne."})
+        # Validation du purpose avec les choix du modèle InternAccount
+        if purpose not in dict(InternAccount.PURPOSE_CHOICES):
+            raise serializers.ValidationError(
+                {"purpose": "Type de finalité invalide pour un compte interne."}
+            )
 
         try:
-            account_number = Account.generate_account_number()
-            internal_account = Account.objects.db_manager(bank_db).create(
+            # Génération du numéro de compte
+            account_number = InternAccount.generate_account_number()
+            
+            # Création du compte interne avec le nouveau modèle
+            internal_account = InternAccount.objects.db_manager(bank_db).create(
                 user=None,
                 account_number=account_number,
-                type_account='intern',
                 purpose=purpose,
                 balance=validated_data.get('balance', 0),
                 status='ACTIVE'
@@ -32,3 +37,5 @@ class InternalAccountSerializer(serializers.ModelSerializer):
 
         except IntegrityError:
             raise serializers.ValidationError("Erreur lors de la création du compte interne.")
+
+

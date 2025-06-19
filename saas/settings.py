@@ -26,7 +26,16 @@ SECRET_KEY = config("SECRET_KEY")
 DEBUG = config("DEBUG", default=False, cast=bool)
 
 
-ALLOWED_HOSTS = ['127.0.0.1','127.0.0.1:8085','localhost','192.168.74.184','192.168.1.134','192.168.100.72']
+ALLOWED_HOSTS = [
+    '127.0.0.1',
+    '127.0.0.1:8085',
+    'localhost',
+    '192.168.74.184',
+    '192.168.1.134',
+    '192.168.100.72',
+    'backend.next-saas.cloud',
+]
+
 
 #ALLOWED_HOSTS = ['localhost','192.168.100.16']
 #ALLOWED_HOSTS = ['localhost', '192.168.100.135']

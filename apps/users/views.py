@@ -2,7 +2,7 @@ from rest_framework import status
 from rest_framework.response import Response 
 from rest_framework.views import APIView
 from .authentication import CustomTokenObtainPairSerializer
-from .serializer import UserRegistrationSerializer,AganceAccountSerializer,TransactionBusseness,ComercantAccountSerializer,TransactionAgance,AddBusinessOrAgencyAccountSerializer,TransactionSerializer,AllAccountsSerializer,UserAccountSerializer,RegistrationAcounteAgancyBisenessSerializer,PhoneValidationSerializer,MerchantCodeValidationSerializer,PasswordValidationSerializer
+from .serializer import UserRegistrationSerializer,AganceAccountSerializer,TransactionBusinessSerialiser,ComercantAccountSerializer,TransactionAganceSerialiser,AddBusinessOrAgencyAccountSerializer,TransactionSerializer,UserAccountSerializer,RegistrationAcounteAgancyBisenessSerializer,PhoneValidationSerializer,MerchantCodeValidationSerializer,PasswordValidationSerializer
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .authentication import CustomJWTAuthentication
@@ -12,6 +12,9 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from apps.transactions.services.password_reset_otp_service import PasswordResetOTPService
 import logging
+from django.utils import timezone
+from apps.transactions.models import PasswordResetOTP
+from apps.users.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +22,7 @@ logger = logging.getLogger(__name__)
 class SendPasswordResetOTPView(APIView):
     """
     Envoie un OTP pour la réinitialisation de mot de passe
+    Adapté pour la nouvelle conception avec relation User
     """
     
     def post(self, request, *args, **kwargs):
@@ -48,16 +52,24 @@ class SendPasswordResetOTPView(APIView):
         logger.info(f"Utilisation de la base de données: {bank_db}")
         
         try:
-            # Initialiser le service OTP
+            # Initialiser le service OTP avec la nouvelle conception
             otp_service = PasswordResetOTPService()
             result = otp_service.send_reset_otp(phone_number, lang, bank_db)
             
             logger.info(f"Résultat envoi OTP reset: {result}")
             
             if result['success']:
-                return Response({
+                # Réponse enrichie avec informations utilisateur si disponible
+                response_data = {
                     'message': result['message']
-                }, status=status.HTTP_200_OK)
+                }
+                
+                # Ajouter des informations supplémentaires en mode dev
+                if result.get('dev_mode'):
+                    response_data['dev_mode'] = True
+                    response_data['balance'] = result.get('balance', 0)
+                
+                return Response(response_data, status=status.HTTP_200_OK)
             else:
                 return Response(
                     {'error': result['error']}, 
@@ -75,6 +87,7 @@ class SendPasswordResetOTPView(APIView):
 class VerifyPasswordResetOTPView(APIView):
     """
     Vérifie l'OTP de réinitialisation et génère un token de reset
+    Adapté pour la nouvelle conception avec relation User
     """
     
     def post(self, request, *args, **kwargs):
@@ -104,18 +117,24 @@ class VerifyPasswordResetOTPView(APIView):
         logger.info(f"Utilisation de la base de données: {bank_db}")
         
         try:
-            # Initialiser le service OTP
+            # Initialiser le service OTP avec la nouvelle conception
             otp_service = PasswordResetOTPService()
             result = otp_service.verify_reset_otp(phone_number, otp_code, bank_db)
             
             logger.info(f"Résultat vérification OTP reset: {result}")
             
             if result['success']:
-                return Response({
+                response_data = {
                     'message': result['message'],
                     'verified': result['verified'],
                     'reset_token': result['reset_token']
-                }, status=status.HTTP_200_OK)
+                }
+                
+                # Ajouter l'ID utilisateur si disponible (utile pour le frontend)
+                if 'user_id' in result:
+                    response_data['user_id'] = result['user_id']
+                
+                return Response(response_data, status=status.HTTP_200_OK)
             else:
                 return Response(
                     {'error': result['error'], 'verified': result['verified']}, 
@@ -131,9 +150,7 @@ class VerifyPasswordResetOTPView(APIView):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ResetPasswordView(APIView):
-    """
-    Réinitialise le mot de passe avec le token de reset
-    """
+  
     
     def post(self, request, *args, **kwargs):
         logger.info(f"ResetPasswordView - Données reçues: {request.data}")
@@ -170,16 +187,24 @@ class ResetPasswordView(APIView):
         logger.info(f"Utilisation de la base de données: {bank_db}")
         
         try:
-            # Initialiser le service OTP
+            # Initialiser le service OTP avec la nouvelle conception
             otp_service = PasswordResetOTPService()
             result = otp_service.reset_password(phone_number, new_password, reset_token, bank_db)
             
             logger.info(f"Résultat réinitialisation password: {result}")
             
             if result['success']:
-                return Response({
+                response_data = {
                     'message': result['message']
-                }, status=status.HTTP_200_OK)
+                }
+                
+                # Ajouter des informations supplémentaires si disponibles
+                if 'user_id' in result:
+                    response_data['user_id'] = result['user_id']
+                if 'reset_timestamp' in result:
+                    response_data['reset_timestamp'] = result['reset_timestamp']
+                
+                return Response(response_data, status=status.HTTP_200_OK)
             else:
                 return Response(
                     {'error': result['error']}, 
@@ -193,14 +218,80 @@ class ResetPasswordView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-# Vue utilitaire pour nettoyer les anciens OTP - Version multi-base
+# Vue utilitaire pour nettoyer les anciens OTP - Adaptée à la nouvelle conception
 @method_decorator(csrf_exempt, name='dispatch')
 class CleanupExpiredOTPView(APIView):
     """
     Nettoie les OTP expirés de la base spécifiée
+    Adapté pour la nouvelle conception avec relation User
     """
     
     def post(self, request, *args, **kwargs):
+        logger.info(f"CleanupExpiredOTPView - Nettoyage demandé")
+        logger.info(f"Headers: X-Source-Bank-Code={request.META.get('HTTP_X_SOURCE_BANK_CODE')}")
+        
+        # Récupérer la base de données depuis l'en-tête
+        bank_db = getattr(request, 'source_bank_db', None)
+        
+        if not bank_db:
+            logger.error("En-tête X-Source-Bank-Code manquant pour le nettoyage")
+            return Response(
+                {'error': 'En-tête X-Source-Bank-Code requis'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        logger.info(f"Nettoyage de la base de données: {bank_db}")
+        
+        try:
+            
+            
+            # Compter d'abord les OTP expirés
+            expired_count = PasswordResetOTP.objects.using(bank_db).filter(
+                expires_at__lt=timezone.now()
+            ).count()
+            
+            logger.info(f"Trouvé {expired_count} OTP expirés dans la base {bank_db}")
+            
+            # Supprimer tous les OTP expirés de la base spécifiée
+            deleted_count = PasswordResetOTP.objects.using(bank_db).filter(
+                expires_at__lt=timezone.now()
+            ).delete()[0]
+            
+            logger.info(f"✅ Supprimé {deleted_count} OTP expirés de la base {bank_db}")
+            
+            # Optionnel: nettoyer aussi les OTP utilisés plus anciens que 24h
+            old_used_count = PasswordResetOTP.objects.using(bank_db).filter(
+                is_used=True,
+                created_at__lt=timezone.now() - timezone.timedelta(hours=24)
+            ).delete()[0]
+            
+            if old_used_count > 0:
+                logger.info(f"✅ Supprimé {old_used_count} anciens OTP utilisés de la base {bank_db}")
+            
+            total_cleaned = deleted_count + old_used_count
+            
+            return Response({
+                'message': f'Nettoyage terminé: {deleted_count} OTP expirés et {old_used_count} anciens OTP utilisés supprimés',
+                'expired_deleted': deleted_count,
+                'old_used_deleted': old_used_count,
+                'total_cleaned': total_cleaned,
+                'database': bank_db
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur lors du nettoyage de la base {bank_db}: {str(e)}")
+            return Response(
+                {'error': f'Erreur serveur lors du nettoyage: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def get(self, request, *args, **kwargs):
+        """
+        Méthode GET pour obtenir des statistiques sur les OTP sans les supprimer
+        Adaptée à la nouvelle conception avec relation User
+        """
+        logger.info(f"CleanupExpiredOTPView - Statistiques demandées")
+        
         # Récupérer la base de données depuis l'en-tête
         bank_db = getattr(request, 'source_bank_db', None)
         
@@ -211,26 +302,58 @@ class CleanupExpiredOTPView(APIView):
             )
         
         try:
-            from django.utils import timezone
-            from apps.transactions.models import PasswordResetOTP
             
-            # Supprimer tous les OTP expirés de la base spécifiée
-            deleted_count = PasswordResetOTP.objects.using(bank_db).filter(
+            
+            # Statistiques des OTP avec informations utilisateur
+            total_otps = PasswordResetOTP.objects.using(bank_db).count()
+            expired_otps = PasswordResetOTP.objects.using(bank_db).filter(
                 expires_at__lt=timezone.now()
-            ).delete()[0]
+            ).count()
+            verified_otps = PasswordResetOTP.objects.using(bank_db).filter(
+                is_verified=True
+            ).count()
+            used_otps = PasswordResetOTP.objects.using(bank_db).filter(
+                is_used=True
+            ).count()
+            pending_otps = PasswordResetOTP.objects.using(bank_db).filter(
+                is_verified=False,
+                is_used=False,
+                expires_at__gte=timezone.now()
+            ).count()
             
-            logger.info(f"Supprimé {deleted_count} OTP expirés de la base {bank_db}")
+            # Statistiques utilisateur avec OTP actifs
+            users_with_active_otps = PasswordResetOTP.objects.using(bank_db).filter(
+                is_verified=False,
+                is_used=False,
+                expires_at__gte=timezone.now()
+            ).values_list('user_id', flat=True).distinct().count()
+            
+            # Statistiques sur les tentatives
+            high_attempts_otps = PasswordResetOTP.objects.using(bank_db).filter(
+                attempts__gte=2
+            ).count()
             
             return Response({
-                'message': f'{deleted_count} OTP expirés supprimés de la base {bank_db}'
+                'database': bank_db,
+                'statistics': {
+                    'total_otps': total_otps,
+                    'expired_otps': expired_otps,
+                    'verified_otps': verified_otps,
+                    'used_otps': used_otps,
+                    'pending_otps': pending_otps,
+                    'users_with_active_otps': users_with_active_otps,
+                    'high_attempts_otps': high_attempts_otps
+                },
+                'message': f'Statistiques pour la base {bank_db} (nouvelle conception avec User)'
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Erreur lors du nettoyage de la base {bank_db}: {str(e)}")
+            logger.error(f"Erreur lors de la récupération des statistiques {bank_db}: {str(e)}")
             return Response(
                 {'error': f'Erreur serveur: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 #//////////////////////////////////////////////
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -311,7 +434,8 @@ class VerifyOTPView(APIView):
 
 class UserRegistrationView(APIView):
     def post(self, request, *args, **kwargs):
-        #logger.info(f"UserRegistrationView - Données reçues: {request.data}")
+        logger.info(f"UserRegistrationView - Données reçues: {request.data}")
+        logger.info(f"bank_db: {request.source_bank_db}")
         
         phone_number = request.data.get('phone_number')
         
@@ -324,13 +448,13 @@ class UserRegistrationView(APIView):
         # Vérifier si le numéro a été vérifié
         otp_service = OTPService()
         if not otp_service.is_phone_verified(phone_number, request.source_bank_db):
-          #  logger.error(f"Numéro {phone_number} non vérifié")
+            logger.error(f"Numéro {phone_number} non vérifié")
             return Response(
                 {'error': 'Veuillez d\'abord vérifier votre numéro de téléphone avec le code OTP'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        #logger.info(f"Numéro {phone_number} vérifié, procédure d'enregistrement...")
+        logger.info(f"Numéro {phone_number} vérifié, procédure d'enregistrement...")
         
         # Procéder à l'enregistrement
         serializer = UserRegistrationSerializer(
@@ -378,21 +502,6 @@ class AddBusinessOrAgencyAccountView(APIView):
               
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)    
-# class CompteValidationView(APIView):
-#     # permission_classes = [IsAuthenticated]
-#     def post(self, request):
-#         # Passer la base de données dans le contexte du sérialiseur
-#         serializer = CompteValidationSerializer(data=request.data, context={'bank_db': request.destination_bank_db})
-        
-#         if serializer.is_valid():
-#             # Si le compte est validé avec succès, renvoyer un message simple
-#             return Response({
-#                 "message": "Numéro de compte valide",
-#             }, status=status.HTTP_200_OK)
-        
-      
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 
 class PhoneValidationView(APIView):
@@ -504,14 +613,14 @@ class TransactionHistoryView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class AllAccountsView(APIView):
-    def get(self, request):
-        serializer = AllAccountsSerializer( context={'bank_db': request.source_bank_db})
-        return Response(serializer.to_representation(None), status=status.HTTP_200_OK)
+# class AllAccountsView(APIView):
+#     def get(self, request):
+#         serializer = AllAccountsSerializer( context={'bank_db': request.source_bank_db})
+#         return Response(serializer.to_representation(None), status=status.HTTP_200_OK)
 
 class TransactinAganceView(APIView):
     def post(self, request):
-        serializer = TransactionAgance(data=request.data, context={'bank_db': request.source_bank_db})
+        serializer = TransactionAganceSerialiser(data=request.data, context={'bank_db': request.source_bank_db})
         if serializer.is_valid():
 
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -519,7 +628,7 @@ class TransactinAganceView(APIView):
 
 class TransactinBussnessView(APIView):
     def post(self, request):
-        serializer = TransactionBusseness(data=request.data, context={'bank_db': request.source_bank_db})
+        serializer = TransactionBusinessSerialiser(data=request.data, context={'bank_db': request.source_bank_db})
         if serializer.is_valid():
 
             return Response(serializer.data, status=status.HTTP_200_OK)

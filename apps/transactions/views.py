@@ -3,9 +3,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import PreTransaction
 from .models import PaymentRequest
-from apps.accounts.models import Account
+from apps.accounts.models import BusinessAccount
 from apps.users.models import User
 from decimal import Decimal
+from rest_framework.permissions import IsAuthenticated
+
 from datetime import timedelta
 from django.utils import timezone
 from .serializer import TransferTransactionSerializer,RechargeAgencySerializer,AllPreTransactionsSerializer,RetraitMarchantSerializer,MerchantPaymentSerializer,DepositTransactionSerializer,PreTransactionRetrieveSerializer,RetraitTransactionSerializer,PreTransactionSerializer
@@ -75,6 +77,7 @@ class MerchantPaymentView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class CreatePreTransactionView(APIView):
+    # permission_classes = [IsAuthenticated]
     def post(self, request):
       #  purge_expired_pretransactions(request.source_bank_db)
         serializer = PreTransactionSerializer(data=request.data, context={'bank_db': request.source_bank_db})
@@ -140,20 +143,23 @@ class CancelPreTransactionView(APIView):
 #     for item in expired_items:
 #         item.delete(using=bank_db)
               
-
 class CreatePaymentRequestView(APIView):
     def post(self, request):
         bank_db = request.source_bank_db 
         try:
-            
+            # Récupération des données
             montant = request.data.get("montant") 
-            client_phone=request.data.get("client_phone")
-            try:
-              user = User.objects.using(bank_db).get(phone_number=client_phone)
-            except User.DoesNotExist:
-              raise serializers.ValidationError({"client_phone": f"Utilisateur client avec le numéro {client_phone} introuvable."})
+            client_phone = request.data.get("client_phone")
             
+            # Validation de l'utilisateur
+            try:
+                user = User.objects.using(bank_db).get(phone_number=client_phone)
+            except User.DoesNotExist:
+                return Response({
+                    "error": f"Utilisateur client avec le numéro {client_phone} introuvable."
+                }, status=400)
 
+            # Validation du montant
             if not montant:
                 return Response({"error": "Le montant est requis."}, status=400)
 
@@ -164,11 +170,13 @@ class CreatePaymentRequestView(APIView):
             except:
                 return Response({"error": "Montant invalide."}, status=400)
 
-            
-            merchant_account = Account.objects.using(bank_db).filter(user=user, type_account="business").first()
-            if not merchant_account:
+            # Récupération du compte business avec le nouveau modèle
+            try:
+                merchant_account = BusinessAccount.objects.using(bank_db).get(user=user)
+            except BusinessAccount.DoesNotExist:
                 return Response({"error": "Compte commerçant introuvable."}, status=400)
 
+            # Création de la demande de paiement
             payment_request = PaymentRequest.objects.using(bank_db).create(
                 merchant=merchant_account,
                 amount=montant

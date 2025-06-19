@@ -14,7 +14,7 @@ class AccountManager(models.Manager):
             if not self.db_manager(bank_db).filter(code=code).exists():
                 return code
             
-class Account(models.Model):
+class AbstractAccount(models.Model):
     STATUS_CHOICES = (
         ('ACTIVE', 'Actif'),
         ('PENDING', 'En attente'),
@@ -22,38 +22,18 @@ class Account(models.Model):
         ('CLOSED', 'Fermé'),
     )
 
-    ACCOUNT_TYPES = [
-        ('personnel', 'Personnel'),       
-        ('business', 'Business'),   
-        ('agency', 'Agency'),       
-        ('intern', 'Intern') 
-    ]
-
-    PURPOSE_CHOICES = [
-        ('commission', 'Commission'),
-        ('frais', 'Frais'),
-        ('taxe', 'Taxe'),
-        ('reserve', 'Reserve'),
-    ]
-
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)  
     account_number = models.CharField(max_length=30, unique=True)
     balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    type_account = models.CharField(max_length=50, choices=ACCOUNT_TYPES, default='personnel')
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='ACTIVE')
     created_at = models.DateTimeField(auto_now_add=True)
-    registration_number = models.CharField(max_length=50, null=True, blank=True)
-    tax_id = models.CharField(max_length=50, null=True, blank=True)
-    code = models.CharField(max_length=6, null=True, blank=True,unique=True)
-    purpose = models.CharField(max_length=50,choices=PURPOSE_CHOICES,null=True,blank=True)
-    deposit_porcentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
-    retrai_percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    
 
  
     objects = AccountManager()
 
     class Meta:
-        app_label = 'accounts'
+        abstract = True
 
     def __str__(self):
         return f"{self.type_account} - {self.account_number} - {self.status}"  
@@ -70,19 +50,38 @@ class Account(models.Model):
     
     
 
-class DemandeChequiers(models.Model):
-    CHOIX_NOMBRE_PAGES = [
-        (25, '25 pages'),
-        (50, '50 pages'),
+class PersonalAccount(AbstractAccount):
+    class Meta:
+        app_label = 'accounts'
+
+
+class BusinessAccount(AbstractAccount):
+    registration_number = models.CharField(max_length=50, null=True, blank=True)
+    tax_id = models.CharField(max_length=50, null=True, blank=True)
+    code = models.CharField(max_length=6, null=True, blank=True, unique=True)
+
+    class Meta:
+        app_label = 'accounts'
+
+class AgencyAccount(AbstractAccount):
+    registration_number = models.CharField(max_length=50, null=True, blank=True)
+    tax_id = models.CharField(max_length=50, null=True, blank=True)
+    code = models.CharField(max_length=6, null=True, blank=True, unique=True)
+    deposit_porcentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    retrai_percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+
+    class Meta:
+        app_label = 'accounts'
+
+class InternAccount(AbstractAccount):
+    PURPOSE_CHOICES = [
+        ('commission', 'Commission'),
+        ('frais', 'Frais'),
+        ('taxe', 'Taxe'),
+        ('reserve', 'Reserve'),
     ]
 
-    compte = models.ForeignKey(Account, on_delete=models.CASCADE)
-    numero_cheque_debut = models.CharField(max_length=10)
-    numero_cheque_fin = models.CharField(max_length=10)
-    motif = models.TextField()
-    est_traite = models.BooleanField(default=False)
-    demande_le = models.DateTimeField(auto_now_add=True)
-    nombre_pages = models.IntegerField(
-        choices=CHOIX_NOMBRE_PAGES,
-        validators=[MinValueValidator(25), MaxValueValidator(50)]
-    )
+    purpose = models.CharField(max_length=50, choices=PURPOSE_CHOICES, null=True, blank=True)
+
+    class Meta:
+        app_label = 'accounts'

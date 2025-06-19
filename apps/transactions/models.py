@@ -1,15 +1,21 @@
 from django.db import models
-from apps.accounts.models import Account
+from apps.accounts.models import BusinessAccount 
 from django.utils import timezone
 import uuid
 import random
-
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from datetime import timedelta
 import secrets
 import string
-
+from apps.users.models import User
 
 class PasswordResetOTP(models.Model):
+    user = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='password_reset_otps'
+    )
     phone_number = models.CharField(max_length=20)
     otp_code = models.CharField(max_length=6)
     reset_token = models.CharField(max_length=64, unique=True, null=True, blank=True)
@@ -57,10 +63,7 @@ class PasswordResetOTP(models.Model):
         )
 
     def mark_as_used(self, using=None):
-        """
-        Marque le token comme utilisé
-        CORRECTION: Accepter le paramètre using pour multi-DB
-        """
+      
         self.is_used = True
         self.save(using=using)  
 
@@ -135,12 +138,15 @@ class Transaction(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     external_account_number = models.CharField(max_length=50, null=True, blank=True)
     external_bank = models.CharField(max_length=50, null=True, blank=True)
-    source_account = models.ForeignKey(
-        Account, related_name='source_transactions', null=True, blank=True, on_delete=models.CASCADE
-    )
-    destination_account = models.ForeignKey(
-        Account, related_name='destination_transactions', null=True, blank=True, on_delete=models.CASCADE
-    )
+    source_account_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, related_name='source_transactions',null=True, blank=True)
+    source_account_id = models.PositiveIntegerField(null=True, blank=True)
+    source_account = GenericForeignKey('source_account_type', 'source_account_id')
+
+    # Generic relation for destination account
+    destination_account_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, related_name='destination_transactions',null=True, blank=True)
+    destination_account_id = models.PositiveIntegerField(null=True, blank=True)
+    destination_account = GenericForeignKey('destination_account_type', 'destination_account_id')
+
 
     # def save(self, *args, **kwargs):
     #     if not self.id:
@@ -162,6 +168,11 @@ class PreTransaction(models.Model):
         max_length=20,
         unique=True,
         editable=False
+    )
+    user = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='pretransactions'
     )
     code = models.CharField(max_length=4, unique=True)
     client_phone = models.CharField(max_length=15)
@@ -215,7 +226,7 @@ class FeeRule(models.Model):
         return f"{self.transaction_type} <= {self.max_amount} : {self.fee_amount}"    
 
 class PaymentRequest(models.Model):
-    merchant = models.ForeignKey(Account, on_delete=models.CASCADE, limit_choices_to={'type_account': 'business'})
+    merchant = models.ForeignKey(BusinessAccount, on_delete=models.CASCADE, limit_choices_to={'type_account': 'business'})
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     code = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     status = models.CharField(max_length=20, choices=[('pending', 'En attente'), ('paid', 'Payé')], default='pending')

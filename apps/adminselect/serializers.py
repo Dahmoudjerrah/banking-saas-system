@@ -1,54 +1,53 @@
-# from rest_framework import serializers
-# from apps.accounts.models import Account, DemandeChequiers
-# from apps.transactions.models import Fee, FeeRule, PaymentRequest, PreTransaction, Transaction
-# from apps.users.models import User
+from rest_framework import serializers
+from apps.transactions.models import Fee, FeeRule, PaymentRequest, PreTransaction, Transaction
+from apps.users.models import User
 
-# from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.password_validation import validate_password
 
-# from django.db import IntegrityError
-# from rest_framework.exceptions import ValidationError
+from django.db import IntegrityError
+from rest_framework.exceptions import ValidationError
 
-# class MultiDatabaseSerializerMixin:
-#     """Mixin pour gérer les bases de données multiples dans les serializers"""
+class MultiDatabaseSerializerMixin:
+    """Mixin pour gérer les bases de données multiples dans les serializers"""
     
-#     def __init__(self, *args, **kwargs):
-#         self.bank_db = kwargs.pop('bank_db', None)
-#         super().__init__(*args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        self.bank_db = kwargs.pop('bank_db', None)
+        super().__init__(*args, **kwargs)
     
-#     def get_db_for_model(self, model_class):
-#         """Retourne la base de données à utiliser pour un modèle donné"""
-#         return self.bank_db or 'default'
+    def get_db_for_model(self, model_class):
+        """Retourne la base de données à utiliser pour un modèle donné"""
+        return self.bank_db or 'default'
 
-# class LoginSerializer(serializers.Serializer):
-#     phone_number = serializers.CharField()
-#     password = serializers.CharField(write_only=True)
+class LoginSerializer(serializers.Serializer):
+    phone_number = serializers.CharField()
+    password = serializers.CharField(write_only=True)
     
-#     def validate(self, data):
-#         phone_number = data.get('phone_number')
-#         password = data.get('password')
+    def validate(self, data):
+        phone_number = data.get('phone_number')
+        password = data.get('password')
         
-#         if not phone_number or not password:
-#             raise serializers.ValidationError("numero de telephone et password sont requis.")
+        if not phone_number or not password:
+            raise serializers.ValidationError("numero de telephone et password sont requis.")
         
-#         # Récupérer la base de données du contexte
-#         bank_db = self.context.get('bank_db', 'default')
+        # Récupérer la base de données du contexte
+        bank_db = self.context.get('bank_db', 'default')
         
-#         # Chercher l'utilisateur dans la base de données spécifiée
-#         try:
-#             user = User.objects.using(bank_db).get(phone_number=phone_number)
-#         except User.DoesNotExist:
-#             raise serializers.ValidationError("Numero du telephone d'utilisateur ou mot de passe incorrect.")
+        # Chercher l'utilisateur dans la base de données spécifiée
+        try:
+            user = User.objects.using(bank_db).get(phone_number=phone_number)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("Numero du telephone d'utilisateur ou mot de passe incorrect.")
         
-#         # Vérifier le mot de passe
-#         if not user.check_password(password):
-#             raise serializers.ValidationError("Numero du telephone ou mot de passe incorrect.")
+        # Vérifier le mot de passe
+        if not user.check_password(password):
+            raise serializers.ValidationError("Numero du telephone ou mot de passe incorrect.")
         
-#         # Vérifier si l'utilisateur est actif
-#         # if not user.is_active:
-#         #     raise serializers.ValidationError("Ce compte est désactivé.")
+        # Vérifier si l'utilisateur est actif
+        # if not user.is_active:
+        #     raise serializers.ValidationError("Ce compte est désactivé.")
         
-#         data['user'] = user
-#         return data
+        data['user'] = user
+        return data
 
 # class RegisterSerializer(serializers.ModelSerializer):
 #     phone_number = serializers.CharField(required=False)
@@ -403,26 +402,26 @@
 #             self.fields['destination_account'].bank_db = self.bank_db
 #         return super().to_representation(instance)
 
-# class FeeRuleSerializer(MultiDatabaseSerializerMixin, serializers.ModelSerializer):
-#     class Meta:
-#         model = FeeRule
-#         fields = '__all__'
+class FeeRuleSerializer(MultiDatabaseSerializerMixin, serializers.ModelSerializer):
+    class Meta:
+        model = FeeRule
+        fields = '__all__'
 
-#     def create(self, validated_data):
-#         db = self.context.get('bank_db', 'default')
+    def create(self, validated_data):
+        db = self.context.get('bank_db', 'default')
         
-#         # On enlève l'éventuel champ 'using' si jamais il est là par erreur
-#         validated_data.pop('using', None)
+        # On enlève l'éventuel champ 'using' si jamais il est là par erreur
+        validated_data.pop('using', None)
 
-#         return FeeRule.objects.using(db).create(**validated_data)
+        return FeeRule.objects.using(db).create(**validated_data)
 
 
-#     def update(self, instance, validated_data):
-#         db = self.bank_db or 'default'
-#         for attr, value in validated_data.items():
-#             setattr(instance, attr, value)
-#         instance.save(using=db)
-#         return instance
+    def update(self, instance, validated_data):
+        db = self.bank_db or 'default'
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save(using=db)
+        return instance
 
 
 # class FeeSerializer(MultiDatabaseSerializerMixin, serializers.ModelSerializer):

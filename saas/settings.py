@@ -30,7 +30,7 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
     '127.0.0.1:8085',
     'localhost',
-    '192.168.74.184',
+    '192.168.1.149',
     '192.168.1.134',
     '192.168.100.72',
     'backend.next-saas.cloud',
@@ -109,15 +109,22 @@ TEMPLATES = [
 WSGI_APPLICATION = 'saas.wsgi.application'
 REST_FRAMEWORK = {
     
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-        #'core.keycloak_auth.KeycloakAuthentication',
+    # 'DEFAULT_AUTHENTICATION_CLASSES': (
+    #     'rest_framework_simplejwt.authentication.JWTAuthentication',
+    #     #'core.keycloak_auth.KeycloakAuthentication',
       
-    )
+    # ),
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 10,
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+        'rest_framework.filters.SearchFilter',
+        'rest_framework.filters.OrderingFilter',
+    ],
     
 }
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     # 'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
@@ -152,35 +159,36 @@ SIMPLE_JWT = {
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME_SAAS'),
-        'USER': config('DB_USER'),
-        'PASSWORD': config('DB_PASSWORD'),
-        'HOST': config('DB_HOST'),
-        'PORT': config('DB_PORT_SAAS'),
+        'NAME': 'saas_db',
+        'USER': 'postgres',
+        'PASSWORD': '1234',
+        'HOST': 'localhost',
+        'PORT': '5432',
     },
     'rasidi': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME_RASIDI'),
-        'USER': config('DB_USER'),
-        'PASSWORD': config('DB_PASSWORD'),
-        'HOST': config('DB_HOST_RASIDI'),
-        'PORT': config('DB_PORT_RASIDI'),
+        'NAME': 'rasidi_db',
+        'USER': 'postgres',
+        'PASSWORD': '1234',
+        'HOST': 'localhost',
+        'PORT': '5432',
     },
     'gaza': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME_GAZA'),
-        'USER': config('DB_USER'),
-        'PASSWORD': config('DB_PASSWORD'),
-        'HOST': config('DB_HOST_GAZA'),
-        'PORT': config('DB_PORT_GAZA'),
-    },
+        'NAME': 'gaza_db',
+        'USER': 'postgres',
+        'PASSWORD': '1234',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
+    ,
     'sedad': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME_SEDAD'),
-        'USER': config('DB_USER'),
-        'PASSWORD': config('DB_PASSWORD'),
-        'HOST': config('DB_HOST_SEDAD'),
-        'PORT': config('DB_PORT_SEDAD'),
+        'NAME': 'sedad_db',
+        'USER': 'postgres',
+        'PASSWORD': '1234',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 

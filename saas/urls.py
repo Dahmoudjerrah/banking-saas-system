@@ -13,7 +13,7 @@ urlpatterns = [
     path('api/', include('apps.transactions.urls')),
     #path('api/token/',TokenObtainPairView.as_view()),
     path('api/token/refresh/',TokenRefreshView.as_view()),
-    #path('',include('apps.adminselect.urls'))
+    path('',include('apps.adminselect.urls'))
     # path('phonenumber/', CheckPhoneNumberView.as_view(), name='check-phone-number'),
 ]
 

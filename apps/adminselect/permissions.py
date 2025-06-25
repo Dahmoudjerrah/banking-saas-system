@@ -1,9 +1,13 @@
 from rest_framework import permissions
 from django.contrib.auth.models import Group
+from .models import GroupApiPermission, UserApiPermission
 
-class RoleBasedPermission(permissions.BasePermission):
+class ApiAccessPermission(permissions.BasePermission):
     """
-    Permission personnalisée basée sur les rôles utilisateur
+    Permission avec gestion spéciale pour admin :
+    - Admin a accès complet par défaut
+    - SAUF si des permissions spécifiques sont définies pour cet admin
+    - Les autres utilisateurs suivent le système groupe + permissions individuelles
     """
     
     def has_permission(self, request, view):
@@ -12,134 +16,87 @@ class RoleBasedPermission(permissions.BasePermission):
         
         # Récupérer la base de données utilisée
         bank_db = getattr(request, 'source_bank_db', 'default')
-        print(bank_db)
+        
         # Vérifier que l'utilisateur existe dans cette base de données
         try:
             from apps.users.models import User
             db_user = User.objects.using(bank_db).get(id=request.user.id)
         except User.DoesNotExist:
             return False
-            
-        # Récupérer le rôle de l'utilisateur dans cette base de données
-        user_groups = db_user.groups.using(bank_db).values_list('name', flat=True)
-        print("Groupes de l'utilisateur:", list(user_groups))
-        
-        # Admin a accès à tout
-        if 'admin' in user_groups:
-            return True
-            
-        # Mapping des permissions par vue et rôle
-        permission_map = {
-            'RegistrationAcounteAgancyBisenessView': {
-                'admin': ['POST'],  # AJOUTÉ
-                'backoffice': ['POST'],
-                'business': ['POST'],
-                'agency': ['POST'],
-                'kyc': [],
-                'reporting': ['GET']
-            },
-            
-            # Vues Transaction
-            'TransactionViewSet': {
-                'admin': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],  # AJOUTÉ
-                'backoffice': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-                'business': [],
-                'agency': [],
-                'kyc': [],
-                'reporting': ['GET']
-            },
-            
-            # Vues Account
-            'AccountViewSet': {
-                'admin': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],  # AJOUTÉ
-                'backoffice': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-                'business': ['GET', 'PUT', 'PATCH'],  # Gestion business
-                'agency': ['GET', 'PUT', 'PATCH'],    # Gestion agence
-                'kyc': ['GET', 'PUT', 'PATCH'],       # Validation compte
-                'reporting': ['GET']
-            },
-            
-            # Vues FeeRule (sensible - tarifs)
-            'FeeRuleViewSet': {
-                'admin': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],  # AJOUTÉ
-                'backoffice': [],  # Pas d'accès aux tarifs
-                'business': [],
-                'agency': [],
-                'kyc': [],
-                'reporting': ['GET']
-            },
-            
-            # Vues Fee (sensible)
-            'FeeViewSet': {
-                'admin': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],  # AJOUTÉ
-                'backoffice': [],
-                'business': [],
-                'agency': [],
-                'kyc': [],
-                'reporting': ['GET']
-            },
-            
-            # Vues PaymentRequest
-            'PaymentRequestViewSet': {
-                'admin': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],  # AJOUTÉ
-                'backoffice': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-                'business': ['GET', 'POST', 'PUT', 'PATCH'],
-                'agency': [],
-                'kyc': [],
-                'reporting': ['GET']
-            },
-            
-            # Vues PreTransaction
-            'PreTransactionViewSet': {
-                'admin': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],  # AJOUTÉ
-                'backoffice': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-                'business': [],
-                'agency': ['GET', 'POST'],
-                'kyc': [],
-                'reporting': ['GET']
-            },
-            
-            # Vues DemandeChequiers
-            'DemandeChequiersViewSet': {
-                'admin': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],  # AJOUTÉ
-                'backoffice': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-                'business': ['GET', 'POST'],
-                'agency': ['GET', 'POST', 'PUT', 'PATCH'],
-                'kyc': [],
-                'reporting': ['GET']
-            },
-            
-            # Vues Dashboard
-            'DashboardViewSet': {
-                'admin': ['GET'],  # AJOUTÉ
-                'backoffice': ['GET'],
-                'business': [],
-                'agency': [],
-                'kyc': [],
-                'reporting': ['GET']
-            }
-        }
         
         view_name = view.__class__.__name__
-        method = request.method
         
-        # Vérifier les permissions pour chaque rôle
-        for role in user_groups:
-            if role in permission_map.get(view_name, {}):
-                allowed_methods = permission_map[view_name][role]
-                if method in allowed_methods:
-                    return True
+        # Gestion spéciale pour les admins
+        if self._is_admin_user(db_user, bank_db):
+            return self._check_admin_access(db_user, view_name, bank_db)
+        
+        # Pour les autres utilisateurs : vérification normale
+        # 1. Vérifier l'accès via groupe
+        if self._check_group_permissions(db_user, view_name, bank_db):
+            return True
+        
+        # 2. Vérifier l'accès via permissions individuelles
+        if self._check_user_permissions(db_user, view_name, bank_db):
+            return True
+            
+        return False
+    
+    def _is_admin_user(self, user, bank_db):
+        """
+        Vérifier si l'utilisateur est admin
+        """
+        user_groups = user.groups.using(bank_db).values_list('name', flat=True)
+        return 'admin' in user_groups
+    
+    def _check_admin_access(self, user, view_name, bank_db):
+        """
+        Gestion spéciale pour les admins :
+        - Si des permissions spécifiques existent pour cet admin → utiliser ces permissions
+        - Sinon → accès complet
+        """
+        # Vérifier s'il y a des permissions spécifiques définies pour cet admin
+        admin_specific_permissions = UserApiPermission.objects.using(bank_db).filter(
+            user=user,
+            is_admin_override=True,
+            is_active=True
+        )
+        
+        if admin_specific_permissions.exists():
+            # L'admin a des restrictions spécifiques
+            return admin_specific_permissions.filter(view_name=view_name).exists()
+        else:
+            # Pas de restrictions spécifiques → accès complet
+            return True
+    
+    def _check_group_permissions(self, user, view_name, bank_db):
+        """
+        Vérifier l'accès via les permissions du groupe
+        """
+        user_groups = user.groups.using(bank_db).all()
+        
+        if not user_groups.exists():
+            return False
+        
+        for group in user_groups:
+            if GroupApiPermission.objects.using(bank_db).filter(
+                group=group,
+                view_name=view_name,
+                is_active=True
+            ).exists():
+                return True
         
         return False
     
+    def _check_user_permissions(self, user, view_name, bank_db):
+        """
+        Vérifier l'accès via permissions individuelles (non-admin)
+        """
+        return UserApiPermission.objects.using(bank_db).filter(
+            user=user,
+            view_name=view_name,
+            is_active=True,
+            is_admin_override=False  # Permissions normales seulement
+        ).exists()
+    
     def has_object_permission(self, request, view, obj):
-        # Vérifier d'abord l'existence de l'utilisateur dans la DB
-        bank_db = getattr(request, 'source_bank_db', 'default')
-        
-        try:
-            from apps.users.models import User
-            User.objects.using(bank_db).get(id=request.user.id)
-        except User.DoesNotExist:
-            return False
-            
         return self.has_permission(request, view)

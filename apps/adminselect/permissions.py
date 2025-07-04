@@ -35,9 +35,9 @@ class ApiAccessPermission(permissions.BasePermission):
         if self._check_group_permissions(db_user, view_name, bank_db):
             return True
         
-        # 2. Vérifier l'accès via permissions individuelles
-        if self._check_user_permissions(db_user, view_name, bank_db):
-            return True
+        # # 2. Vérifier l'accès via permissions individuelles
+        # if self._check_user_permissions(db_user, view_name, bank_db):
+        #     return True
             
         return False
     
@@ -87,16 +87,16 @@ class ApiAccessPermission(permissions.BasePermission):
         
         return False
     
-    def _check_user_permissions(self, user, view_name, bank_db):
-        """
-        Vérifier l'accès via permissions individuelles (non-admin)
-        """
-        return UserApiPermission.objects.using(bank_db).filter(
-            user=user,
-            view_name=view_name,
-            is_active=True,
-            is_admin_override=False  # Permissions normales seulement
-        ).exists()
+    # def _check_user_permissions(self, user, view_name, bank_db):
+    #     """
+    #     Vérifier l'accès via permissions individuelles (non-admin)
+    #     """
+    #     return UserApiPermission.objects.using(bank_db).filter(
+    #         user=user,
+    #         view_name=view_name,
+    #         is_active=True,
+    #         is_admin_override=False  # Permissions normales seulement
+    #     ).exists()
     
     def has_object_permission(self, request, view, obj):
         return self.has_permission(request, view)

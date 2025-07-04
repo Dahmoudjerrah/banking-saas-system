@@ -116,6 +116,9 @@ REST_FRAMEWORK = {
     # ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
+    'PAGE_QUERY_PARAM': 'page',
+    'PAGE_SIZE_QUERY_PARAM': 'page_size',
+    'MAX_PAGE_SIZE': 50,
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
@@ -156,39 +159,74 @@ SIMPLE_JWT = {
 #         'NAME': BASE_DIR / 'db.sqlite3',
 #     }
 # }
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'saas_db',
+#         'USER': 'postgres',
+#         'PASSWORD': '1234',
+#         'HOST': 'localhost',
+#         'PORT': '5432',
+#     },
+#     'rasidi': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'rasidi_db',
+#         'USER': 'postgres',
+#         'PASSWORD': '1234',
+#         'HOST': 'localhost',
+#         'PORT': '5432',
+#     },
+#     'gaza': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'gaza_db',
+#         'USER': 'postgres',
+#         'PASSWORD': '1234',
+#         'HOST': 'localhost',
+#         'PORT': '5432',
+#     }
+#     ,
+#     'sedad': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'sedad_db',
+#         'USER': 'postgres',
+#         'PASSWORD': '1234',
+#         'HOST': 'localhost',
+#         'PORT': '5432',
+#     }
+# }
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'saas_db',
-        'USER': 'postgres',
-        'PASSWORD': '1234',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': config('DB_NAME_SAAS'),
+        'USER': config('DB_USER'),
+        'PASSWORD': config('DB_PASSWORD'),
+        'HOST': config('DB_HOST'),
+        'PORT': config('DB_PORT_SAAS'),
     },
     'rasidi': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'rasidi_db',
-        'USER': 'postgres',
-        'PASSWORD': '1234',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': config('DB_NAME_RASIDI'),
+        'USER': config('DB_USER'),
+        'PASSWORD': config('DB_PASSWORD'),
+        'HOST': config('DB_HOST_RASIDI'),
+        'PORT': config('DB_PORT_RASIDI'),
     },
     'gaza': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'gaza_db',
-        'USER': 'postgres',
-        'PASSWORD': '1234',
-        'HOST': 'localhost',
-        'PORT': '5432',
-    }
-    ,
+        'NAME': config('DB_NAME_GAZA'),
+        'USER': config('DB_USER'),
+        'PASSWORD': config('DB_PASSWORD'),
+        'HOST': config('DB_HOST_GAZA'),
+        'PORT': config('DB_PORT_GAZA'),
+    },
     'sedad': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'sedad_db',
-        'USER': 'postgres',
-        'PASSWORD': '1234',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': config('DB_NAME_SEDAD'),
+        'USER': config('DB_USER'),
+        'PASSWORD': config('DB_PASSWORD'),
+        'HOST': config('DB_HOST_SEDAD'),
+        'PORT': config('DB_PORT_SEDAD'),
     }
 }
 

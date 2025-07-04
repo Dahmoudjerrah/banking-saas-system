@@ -1,11 +1,13 @@
 from rest_framework import serializers
 from apps.transactions.models import Fee, FeeRule, PaymentRequest, PreTransaction, Transaction
-from apps.users.models import User
+# from apps.users.models import User
 
 from django.contrib.auth.password_validation import validate_password
 
 from django.db import IntegrityError
 from rest_framework.exceptions import ValidationError
+from django.contrib.auth import get_user_model
+from datetime import timedelta
 
 class MultiDatabaseSerializerMixin:
     """Mixin pour gérer les bases de données multiples dans les serializers"""
@@ -18,7 +20,13 @@ class MultiDatabaseSerializerMixin:
         """Retourne la base de données à utiliser pour un modèle donné"""
         return self.bank_db or 'default'
 
-class LoginSerializer(serializers.Serializer):
+User = get_user_model()
+
+# Configuration des durées de tokens
+ACCESS_TOKEN_LIFETIME = timedelta(minutes=1)  # 30 minutes
+REFRESH_TOKEN_LIFETIME = timedelta(hours=16)   # 16 heures
+
+class DashboardLoginSerializer(serializers.Serializer):
     phone_number = serializers.CharField()
     password = serializers.CharField(write_only=True)
     
@@ -27,7 +35,7 @@ class LoginSerializer(serializers.Serializer):
         password = data.get('password')
         
         if not phone_number or not password:
-            raise serializers.ValidationError("numero de telephone et password sont requis.")
+            raise serializers.ValidationError("Numéro de téléphone et mot de passe sont requis.")
         
         # Récupérer la base de données du contexte
         bank_db = self.context.get('bank_db', 'default')
@@ -36,19 +44,46 @@ class LoginSerializer(serializers.Serializer):
         try:
             user = User.objects.using(bank_db).get(phone_number=phone_number)
         except User.DoesNotExist:
-            raise serializers.ValidationError("Numero du telephone d'utilisateur ou mot de passe incorrect.")
+            raise serializers.ValidationError("Numéro de téléphone ou mot de passe incorrect.")
         
         # Vérifier le mot de passe
         if not user.check_password(password):
-            raise serializers.ValidationError("Numero du telephone ou mot de passe incorrect.")
+            raise serializers.ValidationError("Numéro de téléphone ou mot de passe incorrect.")
         
         # Vérifier si l'utilisateur est actif
-        # if not user.is_active:
-        #     raise serializers.ValidationError("Ce compte est désactivé.")
+        if not user.is_active:
+            raise serializers.ValidationError("Ce compte est désactivé.")
+        
+        # NOUVELLE VÉRIFICATION: Vérifier si l'utilisateur est staff
+        if not user.is_staff:
+            raise serializers.ValidationError("Accès réservé au personnel autorisé uniquement.")
+        
+        # NOUVELLE VÉRIFICATION: Vérifier que l'utilisateur a au moins un groupe
+        user_groups = user.groups.using(bank_db).all()
+        if not user_groups.exists():
+            raise serializers.ValidationError("Utilisateur sans groupe assigné. Contactez l'administrateur.")
         
         data['user'] = user
+        data['user_groups'] = list(user_groups.values_list('name', flat=True))
         return data
-
+    
+from rest_framework_simplejwt.tokens import RefreshToken
+class CustomRefreshToken(RefreshToken):
+    """Token JWT personnalisé avec durées spécifiques"""
+    
+    @classmethod
+    def for_user(cls, user):
+        token = super().for_user(user)
+        # Définir les durées personnalisées
+        token.set_exp(lifetime=REFRESH_TOKEN_LIFETIME)
+        return token
+    
+    @property
+    def access_token(self):
+        access = super().access_token
+        # Définir la durée du token d'accès
+        access.set_exp(lifetime=ACCESS_TOKEN_LIFETIME)
+        return access
 # class RegisterSerializer(serializers.ModelSerializer):
 #     phone_number = serializers.CharField(required=False)
 #     password = serializers.CharField(write_only=True, validators=[validate_password])

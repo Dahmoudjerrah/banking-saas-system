@@ -16,10 +16,9 @@ class UserBasicSerializer(serializers.ModelSerializer):
 class BaseAccountSerializer(serializers.ModelSerializer):
     """Serializer de base pour tous les types de comptes"""
     user = UserBasicSerializer(read_only=True, help_text="Utilisateur associé au compte")
-    phone_number = serializers.CharField(write_only=True, required=False, help_text="Numéro de téléphone de l'utilisateur")
+    phone_number = serializers.CharField(write_only=True, required=False,allow_blank=True, help_text="Numéro de téléphone de l'utilisateur")
     balance = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     account_number = serializers.CharField(read_only=True)
-    
     class Meta:
         fields = [
             'id', 'user', 'phone_number', 'account_number', 'balance', 
@@ -29,8 +28,9 @@ class BaseAccountSerializer(serializers.ModelSerializer):
     
     def validate(self, attrs):
         # Validation : soit user_id soit phone_number doit être fourni
-        if not attrs.get('phone_number'):
-            raise serializers.ValidationError("Fournissez phone_number pour creer un compte")
+        if self.instance is None:  # création
+            if not attrs.get('phone_number'):
+                raise serializers.ValidationError("Fournissez phone_number pour creer un compte")
         
         return attrs
     
@@ -114,6 +114,20 @@ class AgencyAccountSerializer(BaseAccountSerializer):
             validated_data['code'] = AgencyAccount.objects.db_manager(bank_db).generate_unique_code()
 
         return super().create(validated_data)
+    
+    def update(self, instance, validated_data):
+        if 'deposit_porcentage' in validated_data:
+            instance.deposit_porcentage = validated_data['deposit_porcentage']
+        if 'retrai_percentage' in validated_data:
+            instance.retrai_percentage = validated_data['retrai_percentage']
+
+        bank_db = self.context.get('bank_db', 'default')
+        instance.save(using=bank_db)
+
+        return instance
+
+
+
 
 
 class InternAccountSerializer(serializers.ModelSerializer):

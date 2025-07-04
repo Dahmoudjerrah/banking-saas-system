@@ -4,7 +4,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from apps.accounts.models import  InternAccount, PersonalAccount, BusinessAccount, AgencyAccount
 from apps.adminselect.authentication import MultiDatabaseJWTAuthentication
-from apps.adminselect.serializers import FeeRuleSerializer, LoginSerializer
+from apps.adminselect.paginations import CustomPageNumberPagination
+from apps.adminselect.permissions import ApiAccessPermission
+from apps.adminselect.serializers import CustomRefreshToken, DashboardLoginSerializer, FeeRuleSerializer
 from django.db import models
 from .serializer import AgencyAccountListSerializer, AgencyAccountSerializer, BusinessAccountListSerializer, BusinessAccountSerializer, ClientAccountListSerializer, InternAccountListSerializer, InternAccountSerializer, TransactionListSerializer
 from apps.transactions.models import Fee, FeeRule, PaymentRequest, PreTransaction, Transaction
@@ -22,6 +24,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 from django.contrib.auth.models import Group
 
 class MultiDatabaseViewSetMixin:
@@ -53,46 +56,45 @@ class MultiDatabaseViewSetMixin:
         db = self.get_database()
         serializer.save(using=db)
 
-
-
-class LoginView(APIView):
+class DashboardLoginView(APIView):
     """
-    Vue de connexion avec JWT et support multi-database
+    Vue de connexion dashboard avec vérifications staff et groupes
+    Tokens: 30min access, 16h refresh
     """
     permission_classes = [AllowAny]
-    
+   
     def post(self, request, *args, **kwargs):
         # Récupérer la base de données
         bank_db = getattr(request, 'source_bank_db', 'default')
-        
+       
         if not bank_db:
             return Response({
-                "error": "Base de données bancaire non spécifiée."
+                "error": "Base de données bancaire non spécifiée.",
+                "code": "DB_NOT_SPECIFIED"
             }, status=status.HTTP_400_BAD_REQUEST)
-        
-        serializer = LoginSerializer(
+       
+        serializer = DashboardLoginSerializer(
             data=request.data,
             context={'bank_db': bank_db}
         )
-        
+       
         if serializer.is_valid():
             user = serializer.validated_data['user']
-            
+            user_groups = serializer.validated_data['user_groups']
+           
             try:
-                # Générer les tokens JWT
-                refresh = RefreshToken.for_user(user)
+                # Générer les tokens JWT avec durées personnalisées
+                refresh = CustomRefreshToken.for_user(user)
                 access = refresh.access_token
-                
+               
                 # Ajouter des informations personnalisées au token
                 access['bank_db'] = bank_db
                 access['user_id'] = user.id
                 access['username'] = user.username
-                
-                # Récupérer les groupes de l'utilisateur dans cette DB
-                user_groups = user.groups.using(bank_db).values_list('name', flat=True)
                 access['groups'] = list(user_groups)
                 
-                return Response({
+                # Préparer la réponse avec informations détaillées
+                response_data = {
                     "message": "Connexion réussie.",
                     "access": str(access),
                     "refresh": str(refresh),
@@ -101,64 +103,105 @@ class LoginView(APIView):
                         "username": user.username,
                         "email": user.email,
                         "phone_number": user.phone_number,
-                        "groups": list(user_groups)
+                        "groups": list(user_groups),
                     }
-                }, status=status.HTTP_200_OK)
+                }
                 
+                # Mettre à jour le last_login
+                user.save(using=bank_db, update_fields=['last_login'])
+                
+                return Response(response_data, status=status.HTTP_200_OK)
+               
             except Exception as e:
                 return Response({
-                    "error": f"Erreur lors de la génération du token: {str(e)}"
+                    "error": f"Erreur lors de la génération du token: {str(e)}",
+                    "code": "TOKEN_GENERATION_ERROR"
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+       
+        return Response({
+            "error": "Données de connexion invalides",
+            "details": serializer.errors,
+            "code": "VALIDATION_ERROR"
+        }, status=status.HTTP_400_BAD_REQUEST)
 
-
-class RefreshTokenView(APIView):
+class DashboardRefreshTokenView(APIView):
     """
-    Vue pour rafraîchir le token JWT
+    Vue pour rafraîchir le token JWT du dashboard
     """
     permission_classes = [AllowAny]
-    
+   
     def post(self, request, *args, **kwargs):
         refresh_token = request.data.get('refresh')
-        
+       
         if not refresh_token:
             return Response({
-                "error": "Token de rafraîchissement requis."
+                "error": "Token de rafraîchissement requis.",
+                "code": "REFRESH_TOKEN_REQUIRED"
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+       
         try:
-            refresh = RefreshToken(refresh_token)
-            access = refresh.access_token
+            refresh = CustomRefreshToken(refresh_token)
             
+            # Vérifier si le token est encore valide
+            # refresh.check_blacklist()
+            
+            # Générer un nouveau token d'accès
+            access = refresh.access_token
+           
             # Récupérer la base de données du token ou de la requête
             bank_db = getattr(request, 'source_bank_db', 'default')
-            
-            # Ajouter les informations au nouveau token
-            access['bank_db'] = bank_db
-            
-            # Récupérer l'utilisateur pour mettre à jour les infos
+           
+            # Récupérer l'utilisateur pour vérifier les permissions actuelles
             user_id = refresh.payload.get('user_id')
             if user_id:
                 try:
                     user = User.objects.using(bank_db).get(id=user_id)
+                    
+                    # RE-VÉRIFIER les permissions staff et groupes lors du refresh
+                    
+                    if not user.is_staff:
+                        return Response({
+                            "error": "Privilèges staff révoqués.",
+                            "code": "STAFF_REVOKED"
+                        }, status=status.HTTP_401_UNAUTHORIZED)
+                    
+                    user_groups = list(user.groups.using(bank_db).values_list('name', flat=True))
+                    if not user_groups:
+                        return Response({
+                            "error": "Groupes utilisateur supprimés.",
+                            "code": "GROUPS_REMOVED"
+                        }, status=status.HTTP_401_UNAUTHORIZED)
+                    
+                    # Ajouter les informations au nouveau token
+                    access['bank_db'] = bank_db
                     access['user_id'] = user.id
                     access['username'] = user.username
+                 
                     
-                    user_groups = user.groups.using(bank_db).values_list('name', flat=True)
-                    access['groups'] = list(user_groups)
                 except User.DoesNotExist:
-                    pass
-            
+                    return Response({
+                        "error": "Utilisateur introuvable.",
+                        "code": "USER_NOT_FOUND"
+                    }, status=status.HTTP_401_UNAUTHORIZED)
+           
             return Response({
                 "access": str(access),
-                "refresh": str(refresh)
+                "refresh": str(refresh),
+                
             }, status=status.HTTP_200_OK)
-            
+           
+        except TokenError as e:
+            return Response({
+                "error": f"Token invalide: {str(e)}",
+                "code": "INVALID_TOKEN"
+            }, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
             return Response({
-                "error": f"Token invalide: {str(e)}"
-            }, status=status.HTTP_401_UNAUTHORIZED)
+                "error": f"Erreur lors du rafraîchissement: {str(e)}",
+                "code": "REFRESH_ERROR"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 class BaseAccountListViewWithStats(generics.ListAPIView):
     """Classe de base pour les vues de comptes avec statistiques"""
@@ -166,7 +209,7 @@ class BaseAccountListViewWithStats(generics.ListAPIView):
     filterset_fields = ['status']
     ordering_fields = ['created_at', 'balance']
     ordering = ['-created_at']
-    
+    pagination_class = CustomPageNumberPagination
     def get_queryset(self):
         bank_db = getattr(self.request, 'source_bank_db', 'default')
         return self.model.objects.using(bank_db).order_by('-created_at')
@@ -224,7 +267,8 @@ class BaseAccountListViewWithStats(generics.ListAPIView):
 class InternAccountListView(BaseAccountListViewWithStats, generics.CreateAPIView):
     """Vue spéciale pour lister tous les comptes internes avec résumé"""
     # permission_classes = [ApiAccessPermission]
-    
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     model = InternAccount
     filterset_fields = ['status', 'purpose']
     search_fields = ['account_number']
@@ -259,7 +303,8 @@ class InternAccountListView(BaseAccountListViewWithStats, generics.CreateAPIView
 
 
 class ClientAccountListView(BaseAccountListViewWithStats):
-    # permission_classes = [ApiAccessPermission]
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     serializer_class = ClientAccountListSerializer
     model = PersonalAccount
     search_fields = ['account_number', 'user__email', 'user__phone_number']
@@ -282,6 +327,8 @@ class ClientAccountListView(BaseAccountListViewWithStats):
         }
         
 class BlockUnblockClientAccountView(APIView):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     # permission_classes = [ApiAccessPermission]
 
     def post(self, request, id):
@@ -319,6 +366,8 @@ class BlockUnblockClientAccountView(APIView):
             return Response({'detail': 'Compte introuvable.'}, status=status.HTTP_404_NOT_FOUND)
         
 class ClientAccountNonValiderListView(BaseAccountListViewWithStats):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     # permission_classes = [ApiAccessPermission]
     serializer_class = ClientAccountListSerializer
     model = PersonalAccount
@@ -330,6 +379,8 @@ class ClientAccountNonValiderListView(BaseAccountListViewWithStats):
 
 
 class ValidateClientAccountView(APIView):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     # permission_classes = [ApiAccessPermission]
 
     def post(self, request, id):
@@ -358,6 +409,8 @@ class ValidateClientAccountView(APIView):
 
 
 class AgencyAccountListCreateView(BaseAccountListViewWithStats, generics.CreateAPIView):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     """Vue combinée GET (liste + statistiques) & POST (création) pour les comptes d'agence"""
 
     model = AgencyAccount
@@ -390,7 +443,48 @@ class AgencyAccountListCreateView(BaseAccountListViewWithStats, generics.CreateA
             'accounts_without_code': without_code,
         }
 
+class BlockUnblockAgencyAccountView(APIView):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
+    # permission_classes = [ApiAccessPermission]
+
+    def post(self, request, id):
+        bank_db = getattr(request, 'source_bank_db', 'default')
+        action = request.data.get('action')
+
+        if action not in ['block', 'unblock']:
+            return Response(
+                {'detail': "L'action doit être 'block' ou 'unblock'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            account = AgencyAccount.objects.using(bank_db).get(id=id)
+
+            if action == 'block':
+                if account.status == 'BLOCKED':
+                    print('Le compte est déjà bloqué.')
+                    return Response({'detail': 'Le compte est déjà bloqué.'}, status=status.HTTP_200_OK)
+
+                account.status = 'BLOCKED'
+                message = f'Compte ID {id} bloqué avec succès.'
+
+            else:  # unblock
+                if account.status == 'ACTIVE':
+                    return Response({'detail': 'Le compte est déjà actif.'}, status=status.HTTP_200_OK)
+
+                account.status = 'ACTIVE'
+                message = f'Compte ID {id} débloqué avec succès.'
+
+            account.save(using=bank_db)
+            return Response({'detail': message}, status=status.HTTP_200_OK)
+
+        except AgencyAccount.DoesNotExist:
+            return Response({'detail': 'Compte introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
 class AgencyAccountRetrieveUpdateView(generics.RetrieveUpdateAPIView):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     """Vue pour récupérer ou modifier un compte d'agence"""
     lookup_field = 'id'
 
@@ -408,7 +502,27 @@ class AgencyAccountRetrieveUpdateView(generics.RetrieveUpdateAPIView):
         context['bank_db'] = getattr(self.request, 'source_bank_db', 'default')
         return context
     
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', True)
+        instance = self.get_object()
+
+        # Extraire uniquement les champs de pourcentage
+        data = {}
+        if 'deposit_porcentage' in request.data:
+            data['deposit_porcentage'] = request.data['deposit_porcentage']
+        if 'retrai_percentage' in request.data:
+            data['retrai_percentage'] = request.data['retrai_percentage']
+
+        serializer = self.get_serializer(instance, data=data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 class BusinessAccountListCreateView(BaseAccountListViewWithStats, generics.CreateAPIView):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     """Vue combinée GET (liste + stats) & POST (création) pour les comptes business"""
 
     model = BusinessAccount
@@ -446,10 +560,49 @@ class BusinessAccountListCreateView(BaseAccountListViewWithStats, generics.Creat
             'complete_accounts': complete_accounts,
             'completion_rate': round((complete_accounts / queryset.count() * 100), 2) if queryset.count() > 0 else 0
         }
+class BlockUnblockBusinessAccountView(APIView):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
+    # permission_classes = [ApiAccessPermission]
 
+    def post(self, request, id):
+        bank_db = getattr(request, 'source_bank_db', 'default')
+        action = request.data.get('action')
+
+        if action not in ['block', 'unblock']:
+            return Response(
+                {'detail': "L'action doit être 'block' ou 'unblock'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            account = BusinessAccount.objects.using(bank_db).get(id=id)
+
+            if action == 'block':
+                if account.status == 'BLOCKED':
+                    print('Le compte est déjà bloqué.')
+                    return Response({'detail': 'Le compte est déjà bloqué.'}, status=status.HTTP_200_OK)
+
+                account.status = 'BLOCKED'
+                message = f'Compte ID {id} bloqué avec succès.'
+
+            else:  # unblock
+                if account.status == 'ACTIVE':
+                    return Response({'detail': 'Le compte est déjà actif.'}, status=status.HTTP_200_OK)
+
+                account.status = 'ACTIVE'
+                message = f'Compte ID {id} débloqué avec succès.'
+
+            account.save(using=bank_db)
+            return Response({'detail': message}, status=status.HTTP_200_OK)
+
+        except BusinessAccount.DoesNotExist:
+            return Response({'detail': 'Compte introuvable.'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class InternAccountCreateView(generics.CreateAPIView):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     queryset = InternAccount.objects.all()
     serializer_class = InternAccountSerializer
 
@@ -462,6 +615,8 @@ class InternAccountCreateView(generics.CreateAPIView):
 # Si vous préférez des ViewSets avec des actions dédiées, voici une alternative:
 
 class InternAccountViewSet(viewsets.ModelViewSet):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     """ViewSet alternatif avec action statistics dédiée"""
     serializer_class = InternAccountListSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
@@ -507,6 +662,8 @@ class InternAccountViewSet(viewsets.ModelViewSet):
 
 
 class RegisterAgencyWithUserView(generics.CreateAPIView):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     serializer_class = AgencyAccountSerializer
 
     def post(self, request, *args, **kwargs):
@@ -550,19 +707,10 @@ class RegisterAgencyWithUserView(generics.CreateAPIView):
 
 
 
-class RegistrationAcounteAgencyView(generics.CreateAPIView):
-    serializer_class = AgencyAccountSerializer
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        context['bank_db'] = getattr(self.request, 'source_bank_db', 'default')
-        return context
-
-    def perform_create(self, serializer):
-        
-        serializer.save()
         
 class RegisterBusnissWithUserView(generics.CreateAPIView):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     serializer_class = BusinessAccountSerializer
 
     def post(self, request, *args, **kwargs):
@@ -606,19 +754,10 @@ class RegisterBusnissWithUserView(generics.CreateAPIView):
 
 
 
-class RegistrationAcounteBusnissView(generics.CreateAPIView):
-    serializer_class = BusinessAccountSerializer
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        context['bank_db'] = getattr(self.request, 'source_bank_db', 'default')
-        return context
-
-    def perform_create(self, serializer):
-        
-        serializer.save()
 
 class TransactionListView(generics.ListAPIView):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     """Classe de base pour les vues de transactions avec statistiques"""
     serializer_class = TransactionListSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
@@ -699,6 +838,8 @@ class TransactionListView(generics.ListAPIView):
     
     
 class FeeRuleViewSet(MultiDatabaseViewSetMixin, viewsets.ModelViewSet):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     queryset = FeeRule.objects.all()
     serializer_class = FeeRuleSerializer
     # permission_classes = [RoleBasedPermission]
@@ -713,6 +854,8 @@ class FeeRuleViewSet(MultiDatabaseViewSetMixin, viewsets.ModelViewSet):
         return context
 
 class UpdatePhoneNumberView(APIView):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     # permission_classes = [IsAuthenticated]
 
     def patch(self, request, pk):
@@ -740,6 +883,8 @@ class UpdatePhoneNumberView(APIView):
 
 
 class DashboardViewSet(MultiDatabaseViewSetMixin, viewsets.ViewSet):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     # permission_classes = [RoleBasedPermission]
     # authentication_classes = [MultiDatabaseJWTAuthentication]
     
@@ -1069,6 +1214,8 @@ class DashboardViewSet(MultiDatabaseViewSetMixin, viewsets.ViewSet):
 
 
 class AccountStatementView(generics.GenericAPIView):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     """
     View générique pour récupérer les données du relevé de compte
     Le PDF sera généré côté frontend
@@ -1175,9 +1322,12 @@ class AccountStatementView(generics.GenericAPIView):
             return Response(response_data, status=status.HTTP_200_OK)
             
         except Exception as e:
+            import traceback
+            traceback.print_exc()  # 👈 Imprime la stack trace
             return Response({
                 'error': f'Erreur lors de la génération du relevé: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     
     def _calculate_statistics(self, transactions_qs, account_id):
         """Calcule les statistiques pour le relevé"""
@@ -1204,10 +1354,7 @@ class AccountStatementView(generics.GenericAPIView):
         )
         
         # Statistiques par type
-        stats_by_type = transactions_qs.values('type').annotate(
-            count=Count('id'),
-            total_amount=Sum('amount')
-        )
+        stats_by_type = transactions_qs.values('type').annotate(count=Count('id')).order_by('type')
         
         # Répartition par mois (si la période couvre plusieurs mois)
         monthly_stats = transactions_qs.annotate(
@@ -1238,13 +1385,13 @@ class AccountStatementView(generics.GenericAPIView):
                 {
                     'type': item['type'],
                     'count': item['count'],
-                    'total_amount': float(item['total_amount'] or 0)
+                    # 'total_amount': float(item['total_amount'] or 0)
                 }
                 for item in stats_by_type
             ],
             'by_month': [
                 {
-                    'month_year': item['month_year'],
+                    'month_year': item['month'],
                     'count': item['count'],
                     'total_amount': float(item['total_amount'] or 0)
                 }
@@ -1352,6 +1499,8 @@ class AccountStatementView(generics.GenericAPIView):
             
             
 class UserManagementViewSet(MultiDatabaseViewSetMixin, viewsets.ViewSet):
+    permission_classes = [ApiAccessPermission]
+    authentication_classes = [MultiDatabaseJWTAuthentication]
     # permission_classes = [IsAuthenticated]
     
     def list(self, request):

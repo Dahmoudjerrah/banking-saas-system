@@ -176,6 +176,7 @@ class DashboardRefreshTokenView(APIView):
                     access['bank_db'] = bank_db
                     access['user_id'] = user.id
                     access['username'] = user.username
+                    access['groups'] = list(user_groups)
                  
                     
                 except User.DoesNotExist:
@@ -196,6 +197,7 @@ class DashboardRefreshTokenView(APIView):
                 "code": "INVALID_TOKEN"
             }, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
+            
             return Response({
                 "error": f"Erreur lors du rafraîchissement: {str(e)}",
                 "code": "REFRESH_ERROR"
@@ -1035,7 +1037,7 @@ class DashboardViewSet(MultiDatabaseViewSetMixin, viewsets.ViewSet):
             intern_type = ContentType.objects.using(db).get(pk=18)  # get, pas filter
             intern_compt = InternAccount.objects.using(db).get(purpose='commission')  # get, pas filter
 
-            print(f"Intern account type: {intern_type.id}, ID: {intern_compt.id}")  
+            # print(f"Intern account type: {intern_type.id}, ID: {intern_compt.id}")  
 
             fees_7_days = Transaction.objects.using(db).filter(
                 date__date__gte=last_7_days,

@@ -16,8 +16,7 @@ class MultiDatabaseJWTAuthentication(JWTAuthentication):
         try:
             user_id = validated_token.get('user_id')
             bank_db = validated_token.get('bank_db', 'default')
-            print(user_id)
-            print("jwt : " + bank_db)
+    
             if not user_id:
                 raise InvalidToken('Token ne contient pas user_id')
             

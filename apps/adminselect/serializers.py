@@ -23,7 +23,7 @@ class MultiDatabaseSerializerMixin:
 User = get_user_model()
 
 # Configuration des durées de tokens
-ACCESS_TOKEN_LIFETIME = timedelta(minutes=1)  # 30 minutes
+ACCESS_TOKEN_LIFETIME = timedelta(minutes=30)  # 30 minutes
 REFRESH_TOKEN_LIFETIME = timedelta(hours=16)   # 16 heures
 
 class DashboardLoginSerializer(serializers.Serializer):

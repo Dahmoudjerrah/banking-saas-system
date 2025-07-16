@@ -12,6 +12,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from apps.transactions.services.password_reset_otp_service import PasswordResetOTPService
 import logging
+from apps.transactions.permissions import BusinessAccountPermission,AgencyOrBusinessPermission,AgencyAccountPermission,PersonnelAccountPermission,AllAccountTypesPermission
 from django.utils import timezone
 from apps.transactions.models import PasswordResetOTP
 from apps.users.models import User
@@ -257,7 +258,7 @@ class CleanupExpiredOTPView(APIView):
                 expires_at__lt=timezone.now()
             ).delete()[0]
             
-            logger.info(f"✅ Supprimé {deleted_count} OTP expirés de la base {bank_db}")
+            logger.info(f" Supprimé {deleted_count} OTP expirés de la base {bank_db}")
             
             # Optionnel: nettoyer aussi les OTP utilisés plus anciens que 24h
             old_used_count = PasswordResetOTP.objects.using(bank_db).filter(
@@ -266,7 +267,7 @@ class CleanupExpiredOTPView(APIView):
             ).delete()[0]
             
             if old_used_count > 0:
-                logger.info(f"✅ Supprimé {old_used_count} anciens OTP utilisés de la base {bank_db}")
+                logger.info(f"Supprimé {old_used_count} anciens OTP utilisés de la base {bank_db}")
             
             total_cleaned = deleted_count + old_used_count
             
@@ -279,7 +280,7 @@ class CleanupExpiredOTPView(APIView):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"❌ Erreur lors du nettoyage de la base {bank_db}: {str(e)}")
+            logger.error(f" Erreur lors du nettoyage de la base {bank_db}: {str(e)}")
             return Response(
                 {'error': f'Erreur serveur lors du nettoyage: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -490,6 +491,7 @@ class RegistrationAcounteAgancyBisenessView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class AddBusinessOrAgencyAccountView(APIView):
+    
     def post(self, request, *args, **kwargs):
         serializer = AddBusinessOrAgencyAccountSerializer(
             data=request.data,
@@ -554,6 +556,7 @@ class PasswordValidationView(APIView):
 
 class UserProfileView(APIView):
     #permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,PersonnelAccountPermission]
     def post(self, request):
         serializer = UserAccountSerializer(data=request.data, context={'bank_db': request.source_bank_db})
         if serializer.is_valid():
@@ -569,6 +572,7 @@ class UserProfileView(APIView):
     
 class ComercantProfileView(APIView):
     #permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,BusinessAccountPermission]
     def post(self, request):
         serializer = ComercantAccountSerializer(data=request.data, context={'bank_db': request.source_bank_db})
         if serializer.is_valid():
@@ -587,6 +591,7 @@ class ComercantProfileView(APIView):
 
 class AganceProfileView(APIView):
     #permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,AgencyAccountPermission]
     def post(self, request):
         serializer = AganceAccountSerializer(data=request.data, context={'bank_db': request.source_bank_db})
         if serializer.is_valid():
@@ -605,6 +610,7 @@ class AganceProfileView(APIView):
 
 
 class TransactionHistoryView(APIView):
+    permission_classes = [IsAuthenticated,PersonnelAccountPermission]
     def post(self, request):
         serializer = TransactionSerializer(data=request.data, context={'bank_db': request.source_bank_db})
         if serializer.is_valid():
@@ -619,6 +625,7 @@ class TransactionHistoryView(APIView):
 #         return Response(serializer.to_representation(None), status=status.HTTP_200_OK)
 
 class TransactinAganceView(APIView):
+    permission_classes = [IsAuthenticated,AgencyAccountPermission]
     def post(self, request):
         serializer = TransactionAganceSerialiser(data=request.data, context={'bank_db': request.source_bank_db})
         if serializer.is_valid():
@@ -627,6 +634,7 @@ class TransactinAganceView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST) 
 
 class TransactinBussnessView(APIView):
+    permission_classes = [IsAuthenticated,BusinessAccountPermission]
     def post(self, request):
         serializer = TransactionBusinessSerialiser(data=request.data, context={'bank_db': request.source_bank_db})
         if serializer.is_valid():

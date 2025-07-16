@@ -110,6 +110,15 @@ TEMPLATES = [
 WSGI_APPLICATION = 'saas.wsgi.application'
 REST_FRAMEWORK = {
     
+    
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        
+        'apps.users.authentication.CustomJWTAuthentication',  
+    ),
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+
     # 'DEFAULT_AUTHENTICATION_CLASSES': (
     #     'rest_framework_simplejwt.authentication.JWTAuthentication',
     #     #'core.keycloak_auth.KeycloakAuthentication',

@@ -7,7 +7,7 @@ from apps.accounts.models import BusinessAccount
 from apps.users.models import User
 from decimal import Decimal
 from rest_framework.permissions import IsAuthenticated
-
+from .permissions import AgencyAccountPermission,PersonnelAccountPermission,BusinessAccountPermission,AllAccountTypesPermission
 from datetime import timedelta
 from django.utils import timezone
 from .serializer import TransferTransactionSerializer,RechargeAgencySerializer,AllPreTransactionsSerializer,RetraitMarchantSerializer,MerchantPaymentSerializer,DepositTransactionSerializer,PreTransactionRetrieveSerializer,RetraitTransactionSerializer,PreTransactionSerializer
@@ -18,7 +18,7 @@ from .serializer import TransferTransactionSerializer,RechargeAgencySerializer,A
 class TransferTransactionView(APIView):
     #authentication_classes = [CustomJWTAuthentication]
     #permission_classes = [IsAuthenticated]
-    
+    permission_classes = [IsAuthenticated,PersonnelAccountPermission]
     def post(self, request, *args, **kwargs):
         serializer = TransferTransactionSerializer(data=request.data, context={'bank_db': request.source_bank_db})
         if serializer.is_valid():
@@ -40,6 +40,7 @@ class TransferTransactionView(APIView):
     
 
 class DepositTransactionView(APIView):
+    permission_classes = [IsAuthenticated,AgencyAccountPermission]
     def post(self, request, *args, **kwargs):
 
         serializer = DepositTransactionSerializer(data=request.data, context={'bank_db': request.source_bank_db})
@@ -53,6 +54,8 @@ class DepositTransactionView(APIView):
     
   
 class RetraiTransactionView(APIView):
+      permission_classes = [IsAuthenticated,AgencyAccountPermission]
+
       def post(self, request, *args, **kwargs):
         serializer = RetraitTransactionSerializer(data=request.data, context={'bank_db': request.source_bank_db})
         if serializer.is_valid():
@@ -69,6 +72,7 @@ class RetraiMarchantView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class MerchantPaymentView(APIView):
+    permission_classes = [IsAuthenticated,PersonnelAccountPermission]
     def post(self, request, *args, **kwargs):
         serializer = MerchantPaymentSerializer(data=request.data, context={'bank_db': request.source_bank_db})
         if serializer.is_valid():
@@ -78,6 +82,7 @@ class MerchantPaymentView(APIView):
 
 class CreatePreTransactionView(APIView):
     # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,PersonnelAccountPermission]
     def post(self, request):
       #  purge_expired_pretransactions(request.source_bank_db)
         serializer = PreTransactionSerializer(data=request.data, context={'bank_db': request.source_bank_db})
